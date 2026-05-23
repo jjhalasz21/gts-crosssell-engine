@@ -14,324 +14,474 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ── Styling ────────────────────────────────────────────────────────────────────
+# ── Design tokens ──────────────────────────────────────────────────────────────
+RED      = "#DB0011"
+BG_CARD  = "#161616"
+BG_CARD2 = "#1c1c1c"
+BORDER   = "#2a2a2a"
+TXT      = "#f0f0f0"
+DIM      = "#777777"
+GREEN    = "#00d26a"
+AMBER    = "#f59e0b"
+
+DARK_CHART = dict(
+    plot_bgcolor  = "rgba(0,0,0,0)",
+    paper_bgcolor = "rgba(0,0,0,0)",
+    font          = dict(color=TXT, size=12),
+    margin        = dict(l=4, r=4, t=28, b=4),
+)
+
+# ── Global CSS ─────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-  .block-container { padding-top: 1.5rem; }
-  .metric-card {
-    background: #f8f9fa; border-radius: 8px; padding: 1rem 1.25rem;
-    border-left: 4px solid #DB0011; margin-bottom: 0.75rem;
-  }
-  .score-high { color: #1a7a1a; font-weight: 700; }
-  .score-medium { color: #c47a00; font-weight: 700; }
-  .score-low { color: #888; font-weight: 600; }
-  .pill {
-    display: inline-block; padding: 2px 10px; border-radius: 12px;
-    font-size: 0.78rem; font-weight: 600; margin: 2px;
-  }
-  .pill-existing { background: #e8f4e8; color: #1a7a1a; }
-  .pill-new { background: #fff3cd; color: #856404; }
-  .rationale-item { margin: 4px 0; font-size: 0.9rem; color: #444; }
-  .sidebar-header { font-size: 0.8rem; color: #999; text-transform: uppercase; letter-spacing: 1px; }
+/* ── Layout ─────────────────────────────────────────── */
+.block-container { padding: 2rem 2.5rem 4rem; max-width: 1440px; }
+
+/* ── Tabs ───────────────────────────────────────────── */
+[data-baseweb="tab-list"] {
+  gap: 0.25rem;
+  border-bottom: 1px solid #252525;
+  padding-bottom: 0;
+}
+[data-baseweb="tab"] {
+  padding: 0.55rem 1.4rem;
+  font-size: 0.83rem;
+  font-weight: 500;
+  letter-spacing: 0.4px;
+  border-radius: 6px 6px 0 0;
+  color: #777 !important;
+}
+[aria-selected="true"] { color: #f0f0f0 !important; }
+
+/* ── KPI cards ──────────────────────────────────────── */
+.kpi {
+  background: #161616;
+  border: 1px solid #252525;
+  border-top: 3px solid #DB0011;
+  border-radius: 8px;
+  padding: 1.2rem 1.4rem 1.1rem;
+}
+.kpi-lbl {
+  font-size: 0.65rem; font-weight: 700; color: #666;
+  text-transform: uppercase; letter-spacing: 1.4px;
+  margin-bottom: 0.4rem;
+}
+.kpi-val {
+  font-size: 1.75rem; font-weight: 700; color: #f0f0f0; line-height: 1.1;
+}
+.kpi-sub { font-size: 0.72rem; color: #555; margin-top: 0.25rem; }
+
+/* ── Section / panel labels ─────────────────────────── */
+.eyebrow {
+  font-size: 0.63rem; font-weight: 700; color: #DB0011;
+  text-transform: uppercase; letter-spacing: 2px;
+  margin: 0 0 0.5rem 0;
+}
+.panel-hdr {
+  font-size: 0.95rem; font-weight: 600; color: #f0f0f0;
+  margin: 0 0 1.1rem 0; padding-bottom: 0.55rem;
+  border-bottom: 1px solid #252525;
+}
+
+/* ── Priority badges ────────────────────────────────── */
+.badge {
+  display: inline-block; padding: 3px 11px; border-radius: 20px;
+  font-size: 0.68rem; font-weight: 700; letter-spacing: 0.6px;
+}
+.b-high   { background: rgba(0,210,106,0.11); color: #00d26a; border: 1px solid rgba(0,210,106,0.28); }
+.b-medium { background: rgba(245,158,11,0.11); color: #f59e0b; border: 1px solid rgba(245,158,11,0.28); }
+.b-low    { background: rgba(120,120,120,0.1); color: #666; border: 1px solid #2a2a2a; }
+
+/* ── Product pills ──────────────────────────────────── */
+.ppill {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px; border-radius: 5px; font-size: 0.77rem;
+  margin: 2px 2px; font-weight: 500; white-space: nowrap;
+}
+.pp-on  { background: rgba(219,0,17,0.09); color: #ff4455; border: 1px solid rgba(219,0,17,0.22); }
+.pp-off { background: #171717; color: #444; border: 1px solid #252525; }
+
+/* ── Banker cards ───────────────────────────────────── */
+.bcard {
+  background: #1c1c1c;
+  border: 1px solid #252525;
+  border-left: 3px solid #DB0011;
+  border-radius: 7px;
+  padding: 0.8rem 1rem;
+  margin-bottom: 0.45rem;
+}
+.bcard-role  { font-size: 0.62rem; font-weight: 700; color: #DB0011;
+               text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 5px; }
+.bcard-name  { font-size: 0.9rem; font-weight: 600; color: #f0f0f0; }
+.bcard-title { font-size: 0.73rem; color: #777; margin-top: 2px; }
+
+/* ── Info strip ─────────────────────────────────────── */
+.istrip {
+  background: #161616;
+  border: 1px solid #252525;
+  border-radius: 9px;
+  padding: 1.1rem 1.4rem;
+  margin-bottom: 1.25rem;
+}
+.irow { display: flex; flex-wrap: wrap; gap: 2rem; margin-top: 0.6rem; }
+.iitem { display: flex; flex-direction: column; }
+.ilbl  { font-size: 0.62rem; color: #555; text-transform: uppercase; letter-spacing: 1.1px; }
+.ival  { font-size: 0.9rem; font-weight: 600; color: #f0f0f0; margin-top: 1px; }
+.ctag  {
+  display: inline-block; background: #1c1c1c; border: 1px solid #252525;
+  border-radius: 4px; padding: 2px 9px; font-size: 0.73rem; color: #aaa;
+  margin: 2px; font-family: monospace; letter-spacing: 0.5px;
+}
+
+/* ── Sidebar ────────────────────────────────────────── */
+[data-testid="stSidebar"] { background: #0a0a0a !important; border-right: 1px solid #1e1e1e; }
+.slbl {
+  font-size: 0.62rem; font-weight: 700; color: #DB0011;
+  text-transform: uppercase; letter-spacing: 1.5px;
+  margin: 1.1rem 0 0.3rem 0;
+}
+
+/* ── Expanders ──────────────────────────────────────── */
+[data-testid="stExpander"] {
+  background: #141414 !important;
+  border: 1px solid #252525 !important;
+  border-radius: 8px !important;
+  margin-bottom: 0.45rem;
+}
+
+/* ── Divider ────────────────────────────────────────── */
+hr { border-color: #222 !important; margin: 1.75rem 0 !important; }
 </style>
 """, unsafe_allow_html=True)
+
+
+# ── Helpers ────────────────────────────────────────────────────────────────────
+def kpi(label, value, sub=""):
+    sub_html = f'<div class="kpi-sub">{sub}</div>' if sub else ""
+    return f"""<div class="kpi">
+  <div class="kpi-lbl">{label}</div>
+  <div class="kpi-val">{value}</div>
+  {sub_html}
+</div>"""
+
+
+def badge(label):
+    cls = {"High": "b-high", "Medium": "b-medium", "Low": "b-low"}.get(label, "b-low")
+    return f'<span class="badge {cls}">{label}</span>'
+
+
+def dark(fig, **extra):
+    fig.update_layout(**DARK_CHART, **extra)
+    return fig
+
+
+def banker_card(role, name, title):
+    return f"""<div class="bcard">
+  <div class="bcard-role">{role}</div>
+  <div class="bcard-name">{name}</div>
+  <div class="bcard-title">{title}</div>
+</div>"""
+
 
 # ── Sidebar ────────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.image(
         "https://upload.wikimedia.org/wikipedia/commons/thumb/a/aa/HSBC_logo_%282018%29.svg/320px-HSBC_logo_%282018%29.svg.png",
-        width=140,
+        width=130,
     )
-    st.markdown("## Cross-Sell Engine")
+    st.markdown("### Cross-Sell Engine")
     st.caption("US & International Subsidiary Portfolio")
     st.divider()
 
-    st.markdown('<p class="sidebar-header">Filters</p>', unsafe_allow_html=True)
-
+    st.markdown('<p class="slbl">Client Type</p>', unsafe_allow_html=True)
     client_types = ["US Domestic", "International Subsidiary"]
-    selected_types = st.multiselect("Client Type", client_types, default=client_types)
+    selected_types = st.multiselect("Client Type", client_types, default=client_types, label_visibility="collapsed")
 
+    st.markdown('<p class="slbl">Sector</p>', unsafe_allow_html=True)
     sectors = sorted({c["sector"] for c in CLIENTS})
-    selected_sectors = st.multiselect("Sector", sectors, default=sectors)
+    selected_sectors = st.multiselect("Sector", sectors, default=sectors, label_visibility="collapsed")
 
-    min_score = st.slider("Min Opportunity Score", 0, 100, 40)
+    st.markdown('<p class="slbl">Min Opportunity Score</p>', unsafe_allow_html=True)
+    min_score = st.slider("Score", 0, 100, 40, label_visibility="collapsed")
 
-    st.markdown('<p class="sidebar-header">Product Lines</p>', unsafe_allow_html=True)
+    st.markdown('<p class="slbl">Business Line</p>', unsafe_allow_html=True)
     selected_categories = st.multiselect(
-        "Business Line", list(PRODUCT_CATEGORIES.keys()), default=list(PRODUCT_CATEGORIES.keys())
+        "Business Line", list(PRODUCT_CATEGORIES.keys()),
+        default=list(PRODUCT_CATEGORIES.keys()), label_visibility="collapsed"
     )
     products_filter = [p for cat in selected_categories for p in PRODUCT_CATEGORIES.get(cat, [])]
 
     st.divider()
-    st.caption("Mock data · For illustrative purposes only")
+    st.caption("Mock data · Illustrative purposes only")
 
-# ── Filter clients ─────────────────────────────────────────────────────────────
+
+# ── Filter ─────────────────────────────────────────────────────────────────────
 filtered_clients = [
     c for c in CLIENTS
     if c["sector"] in selected_sectors and c["client_type"] in selected_types
 ]
-all_opps = get_all_opportunities(filtered_clients)
-filtered_opps = [
-    o for o in all_opps
-    if o["score"] >= min_score and o["product"] in products_filter
-]
+all_opps     = get_all_opportunities(filtered_clients)
+filtered_opps = [o for o in all_opps if o["score"] >= min_score and o["product"] in products_filter]
 
-# ── Page tabs ──────────────────────────────────────────────────────────────────
-tab_dashboard, tab_pipeline, tab_client = st.tabs([
-    "📊 Portfolio Overview", "🎯 Opportunity Pipeline", "🔍 Client Deep Dive"
+# ── Tabs ───────────────────────────────────────────────────────────────────────
+tab_dash, tab_pipe, tab_client = st.tabs([
+    "   Portfolio Overview   ",
+    "   Opportunity Pipeline   ",
+    "   Client Deep Dive   ",
 ])
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 1 — Portfolio Overview
 # ══════════════════════════════════════════════════════════════════════════════
-with tab_dashboard:
-    st.markdown("### US & International Subsidiary Trade Finance Portfolio")
-    st.caption(f"Showing {len(filtered_clients)} clients · {len(filtered_opps)} cross-sell opportunities identified")
+with tab_dash:
+    st.markdown('<p class="eyebrow">US & International Subsidiary · Trade Finance Portfolio</p>', unsafe_allow_html=True)
+    st.caption(f"{len(filtered_clients)} clients · {len(filtered_opps)} cross-sell opportunities identified")
+    st.markdown("<br>", unsafe_allow_html=True)
 
-    # KPI row
-    total_trade_vol = sum(c["trade_volume_usd_m"] for c in filtered_clients)
-    total_rev_potential = sum(o["estimated_revenue_usd_k"] for o in filtered_opps) / 1000
-    high_priority = sum(1 for o in filtered_opps if o["score"] >= 70)
-    avg_products = sum(len(c["current_products"]) for c in filtered_clients) / max(len(filtered_clients), 1)
+    total_vol   = sum(c["trade_volume_usd_m"] for c in filtered_clients)
+    rev_upside  = sum(o["estimated_revenue_usd_k"] for o in filtered_opps) / 1000
+    high_ct     = sum(1 for o in filtered_opps if o["score"] >= 70)
+    avg_prods   = sum(len(c["current_products"]) for c in filtered_clients) / max(len(filtered_clients), 1)
 
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total Trade Volume", f"${total_trade_vol:,.0f}M")
-    col2.metric("Cross-Sell Revenue Potential", f"${total_rev_potential:,.1f}M")
-    col3.metric("High-Priority Opportunities", f"{high_priority}")
-    col4.metric("Avg Products per Client", f"{avg_products:.1f} / {len(GTS_PRODUCTS)}")
+    k1, k2, k3, k4 = st.columns(4, gap="medium")
+    k1.markdown(kpi("Total Trade Volume",          f"${total_vol:,.0f}M",  f"{len(filtered_clients)} clients"), unsafe_allow_html=True)
+    k2.markdown(kpi("Cross-Sell Revenue Upside",   f"${rev_upside:,.1f}M", "indicative annual"), unsafe_allow_html=True)
+    k3.markdown(kpi("High-Priority Opportunities", str(high_ct),            "score ≥ 70"), unsafe_allow_html=True)
+    k4.markdown(kpi("Avg Products / Client",       f"{avg_prods:.1f}",      f"of {len(GTS_PRODUCTS)} products"), unsafe_allow_html=True)
 
-    st.divider()
+    st.markdown("<br>", unsafe_allow_html=True)
+    col_l, col_r = st.columns([3, 2], gap="large")
 
-    col_left, col_right = st.columns([3, 2])
-
-    with col_left:
-        # Product penetration heatmap
-        st.markdown("#### Product Penetration by Client")
-        matrix_data = []
+    with col_l:
+        st.markdown('<p class="panel-hdr">Product Penetration by Client</p>', unsafe_allow_html=True)
+        matrix_rows = []
         for c in filtered_clients:
             row = {"Client": c["client"]}
             for p in GTS_PRODUCTS:
                 row[p] = 1 if p in c["current_products"] else 0
-            matrix_data.append(row)
-        df_matrix = pd.DataFrame(matrix_data).set_index("Client")
+            matrix_rows.append(row)
+        df_mat = pd.DataFrame(matrix_rows).set_index("Client")
 
         fig_heat = px.imshow(
-            df_matrix,
-            color_continuous_scale=[[0, "#f5f5f5"], [1, "#DB0011"]],
+            df_mat,
+            color_continuous_scale=[[0, "#1a1a1a"], [1, RED]],
             aspect="auto",
             labels={"color": "Enrolled"},
         )
         fig_heat.update_traces(showscale=False)
-        fig_heat.update_layout(
-            margin=dict(l=0, r=0, t=20, b=0),
-            height=380,
-            xaxis_tickangle=-30,
-        )
+        dark(fig_heat, height=430,
+             xaxis=dict(tickangle=-35, tickfont=dict(size=9, color=DIM), gridcolor=BORDER),
+             yaxis=dict(tickfont=dict(size=9, color=DIM), gridcolor=BORDER))
         st.plotly_chart(fig_heat, use_container_width=True)
 
-    with col_right:
-        # Opportunity score distribution by product
-        st.markdown("#### Avg Opportunity Score by Product")
-        product_scores = {}
+    with col_r:
+        st.markdown('<p class="panel-hdr">Avg Opportunity Score by Product</p>', unsafe_allow_html=True)
+        prod_scores = {}
         for p in GTS_PRODUCTS:
-            scores = [o["score"] for o in filtered_opps if o["product"] == p]
-            product_scores[p] = sum(scores) / len(scores) if scores else 0
+            s = [o["score"] for o in filtered_opps if o["product"] == p]
+            prod_scores[p] = sum(s) / len(s) if s else 0
 
-        df_prod = pd.DataFrame(
-            [{"Product": k, "Avg Score": v} for k, v in product_scores.items()]
-        ).sort_values("Avg Score", ascending=True)
-
-        fig_bar = px.bar(
-            df_prod, x="Avg Score", y="Product", orientation="h",
-            color="Avg Score",
-            color_continuous_scale=[[0, "#ffcccc"], [0.5, "#ff6666"], [1, "#DB0011"]],
+        df_ps = pd.DataFrame([{"Product": k, "Score": v} for k, v in prod_scores.items()]).sort_values("Score")
+        fig_ps = px.bar(
+            df_ps, x="Score", y="Product", orientation="h",
+            color="Score",
+            color_continuous_scale=[[0, "#2a0005"], [0.5, "#7a0008"], [1, RED]],
         )
-        fig_bar.update_layout(
-            margin=dict(l=0, r=0, t=20, b=0),
-            height=320,
-            showlegend=False,
-            coloraxis_showscale=False,
-            xaxis=dict(range=[0, 100]),
-        )
-        st.plotly_chart(fig_bar, use_container_width=True)
+        dark(fig_ps, height=340, showlegend=False, coloraxis_showscale=False,
+             xaxis=dict(range=[0, 100], gridcolor=BORDER, tickfont=dict(color=DIM)),
+             yaxis=dict(tickfont=dict(size=9, color=DIM), gridcolor="rgba(0,0,0,0)"))
+        st.plotly_chart(fig_ps, use_container_width=True)
 
-        # Trade volume vs DSO scatter
-        st.markdown("#### Working Capital Positioning")
-        df_scatter = get_portfolio_df()
-        df_scatter = df_scatter[df_scatter["Sector"].isin(selected_sectors)]
-        fig_scatter = px.scatter(
-            df_scatter, x="DSO (days)", y="DPO (days)",
+        st.markdown('<p class="panel-hdr" style="margin-top:1.25rem">Working Capital Positioning</p>', unsafe_allow_html=True)
+        df_sc = get_portfolio_df()
+        df_sc = df_sc[df_sc["Sector"].isin(selected_sectors)]
+        fig_sc = px.scatter(
+            df_sc, x="DSO (days)", y="DPO (days)",
             size="Trade Volume ($M)", color="Sector",
-            hover_name="Client",
-            size_max=30,
+            hover_name="Client", size_max=28,
         )
-        fig_scatter.update_layout(margin=dict(l=0, r=0, t=20, b=0), height=280)
-        st.plotly_chart(fig_scatter, use_container_width=True)
+        dark(fig_sc, height=270,
+             xaxis=dict(gridcolor=BORDER, tickfont=dict(color=DIM)),
+             yaxis=dict(gridcolor=BORDER, tickfont=dict(color=DIM)),
+             legend=dict(font=dict(size=10, color=DIM), bgcolor="rgba(0,0,0,0)"))
+        st.plotly_chart(fig_sc, use_container_width=True)
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 2 — Opportunity Pipeline
 # ══════════════════════════════════════════════════════════════════════════════
-with tab_pipeline:
-    st.markdown("### Cross-Sell Opportunity Pipeline")
-    st.caption("Ranked by opportunity score · Estimated revenue is indicative only")
+with tab_pipe:
+    st.markdown('<p class="eyebrow">Cross-Sell Opportunity Pipeline · Ranked by Score</p>', unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
 
     if not filtered_opps:
         st.info("No opportunities match current filters. Adjust the sidebar filters.")
     else:
-        # Summary table
         df_opps = pd.DataFrame([{
-            "Client": o["client"],
-            "Type": o.get("client_type", ""),
-            "HQ": o["hq"],
-            "Sector": o["sector"],
-            "Product": o["product"],
-            "Score": o["score"],
-            "Priority": score_label(o["score"]),
-            "Est. Revenue ($K)": o["estimated_revenue_usd_k"],
+            "Client":             o["client"],
+            "Type":               o.get("client_type", ""),
+            "Sector":             o["sector"],
+            "Product":            o["product"],
+            "Score":              o["score"],
+            "Priority":           score_label(o["score"]),
+            "Est. Revenue ($K)":  o["estimated_revenue_usd_k"],
             "Relationship (yrs)": o["relationship_years"],
-        } for o in filtered_opps])
+        } for o in filtered_opps]).sort_values("Score", ascending=False)
 
         def color_priority(val):
             if val == "High":
-                return "background-color: #d4edda; color: #155724; font-weight: bold"
-            elif val == "Medium":
-                return "background-color: #fff3cd; color: #856404; font-weight: bold"
-            return "background-color: #f8f9fa; color: #6c757d"
+                return "background-color: rgba(0,210,106,0.10); color: #00d26a; font-weight: 700"
+            if val == "Medium":
+                return "background-color: rgba(245,158,11,0.10); color: #f59e0b; font-weight: 700"
+            return "color: #555"
 
         styled = df_opps.style.map(color_priority, subset=["Priority"])
         st.dataframe(styled, use_container_width=True, hide_index=True, height=420)
 
-        st.divider()
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown('<p class="panel-hdr">Top Priority Actions</p>', unsafe_allow_html=True)
 
-        # Top 5 detailed cards
-        st.markdown("#### Top Priority Actions")
-        top5 = [o for o in filtered_opps if o["score"] >= 70][:5]
-        if not top5:
-            top5 = filtered_opps[:3]
+        top5 = [o for o in filtered_opps if o["score"] >= 70][:5] or filtered_opps[:3]
 
         for opp in top5:
-            client_data_opp = next((c for c in CLIENTS if c["client"] == opp["client"]), None)
+            cd = next((c for c in CLIENTS if c["client"] == opp["client"]), None)
+            lbl = score_label(opp["score"])
             with st.expander(
-                f"**{opp['client']}** — {opp['product']}  |  Score: {opp['score']}  |  ~${opp['estimated_revenue_usd_k']:,}K",
+                f"{opp['client']}   ·   {opp['product']}   ·   {opp['score']}/100   ·   ${opp['estimated_revenue_usd_k']:,}K",
                 expanded=False,
             ):
-                c1, c2, c3 = st.columns(3)
-                c1.metric("Opportunity Score", f"{opp['score']} / 100")
-                c2.metric("Est. Annual Revenue", f"${opp['estimated_revenue_usd_k']:,}K")
-                c3.metric("Relationship", f"{opp['relationship_years']} years")
+                st.markdown(badge(lbl) + "&nbsp;&nbsp;", unsafe_allow_html=True)
+                st.markdown("<br>", unsafe_allow_html=True)
 
-                if client_data_opp:
-                    bankers = get_bankers_for_opportunity(client_data_opp, opp["product"])
+                m1, m2, m3 = st.columns(3)
+                m1.metric("Opportunity Score",   f"{opp['score']} / 100")
+                m2.metric("Est. Annual Revenue", f"${opp['estimated_revenue_usd_k']:,}K")
+                m3.metric("Relationship",        f"{opp['relationship_years']} yrs")
+                st.markdown("<br>", unsafe_allow_html=True)
+
+                if cd:
+                    bankers = get_bankers_for_opportunity(cd, opp["product"])
                     b1, b2 = st.columns(2)
-                    rm_name, rm_title = bankers["rm"]
-                    b1.markdown(f"**RM:** 👤 {rm_name}  \n_{rm_title}_")
+                    rm_n, rm_t = bankers["rm"]
+                    b1.markdown(banker_card("Relationship Manager", rm_n, rm_t), unsafe_allow_html=True)
                     if bankers["specialists"]:
-                        spec_name, spec_title = bankers["specialists"][0]
-                        b2.markdown(f"**Product Specialist:** 👤 {spec_name}  \n_{spec_title}_")
+                        sn, st_ = bankers["specialists"][0]
+                        b2.markdown(banker_card("Product Specialist", sn, st_), unsafe_allow_html=True)
 
-                st.markdown("**Why this opportunity:**")
-                for point in opp["rationale"]:
-                    st.markdown(f"- {point}")
+                st.markdown("**Why this opportunity**")
+                for pt in opp["rationale"]:
+                    st.markdown(f"- {pt}")
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 3 — Client Deep Dive
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_client:
-    st.markdown("### Client Deep Dive")
+    st.markdown('<p class="eyebrow">Client Deep Dive</p>', unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
 
-    client_names = [c["client"] for c in filtered_clients]
-    selected_name = st.selectbox("Select client", client_names)
-    client_data = next(c for c in CLIENTS if c["client"] == selected_name)
-    scored = analyze_client(client_data)
+    client_names  = [c["client"] for c in filtered_clients]
+    selected_name = st.selectbox("Select client", client_names, label_visibility="collapsed")
+    client_data   = next(c for c in CLIENTS if c["client"] == selected_name)
+    scored        = analyze_client(client_data)
 
-    col_info, col_products = st.columns([2, 3])
+    st.markdown("<br>", unsafe_allow_html=True)
 
-    with col_info:
-        st.markdown(f"#### {client_data['client']}")
-        st.markdown(f"**Sector:** {client_data['sector']}  \n**HQ:** {client_data['hq']}  \n**Relationship:** {client_data['relationship_years']} years")
-        st.divider()
-        m1, m2 = st.columns(2)
-        m1.metric("Revenue", f"${client_data['annual_revenue_usd_m']}M")
-        m2.metric("Trade Volume", f"${client_data['trade_volume_usd_m']}M")
-        m1.metric("DSO", f"{client_data['dso_days']}d")
-        m2.metric("DPO", f"{client_data['dpo_days']}d")
-        m1.metric("Suppliers", f"{client_data['supplier_count']:,}")
-        m2.metric("Trade Geographies", f"{len(client_data['trade_geographies'])}")
+    # Info strip
+    corridors_html = "".join(f'<span class="ctag">{g}</span>' for g in client_data["trade_geographies"])
+    st.markdown(f"""
+<div class="istrip">
+  <div style="font-size:1.1rem;font-weight:700;color:#f0f0f0;margin-bottom:0.7rem">
+    {client_data['client']}
+    <span style="font-size:0.75rem;font-weight:400;color:#555;margin-left:12px">{client_data['client_type']}</span>
+  </div>
+  <div class="irow">
+    <div class="iitem"><span class="ilbl">Sector</span><span class="ival">{client_data['sector']}</span></div>
+    <div class="iitem"><span class="ilbl">HQ</span><span class="ival">{client_data['hq']}</span></div>
+    <div class="iitem"><span class="ilbl">Relationship</span><span class="ival">{client_data['relationship_years']} yrs</span></div>
+    <div class="iitem"><span class="ilbl">Revenue</span><span class="ival">${client_data['annual_revenue_usd_m']}M</span></div>
+    <div class="iitem"><span class="ilbl">Trade Volume</span><span class="ival">${client_data['trade_volume_usd_m']}M</span></div>
+    <div class="iitem"><span class="ilbl">DSO</span><span class="ival">{client_data['dso_days']}d</span></div>
+    <div class="iitem"><span class="ilbl">DPO</span><span class="ival">{client_data['dpo_days']}d</span></div>
+    <div class="iitem"><span class="ilbl">Suppliers</span><span class="ival">{client_data['supplier_count']:,}</span></div>
+    <div class="iitem"><span class="ilbl">Geographies</span><span class="ival">{len(client_data['trade_geographies'])}</span></div>
+  </div>
+  <div style="margin-top:0.8rem">{corridors_html}</div>
+</div>
+""", unsafe_allow_html=True)
 
-        st.markdown("**Trade corridors:**")
-        st.markdown("  ".join(f"`{g}`" for g in client_data["trade_geographies"]))
+    col_cov, col_chart = st.columns([2, 3], gap="large")
 
-    with col_products:
-        st.markdown("#### Product Coverage")
+    with col_cov:
+        st.markdown('<p class="panel-hdr">Product Coverage</p>', unsafe_allow_html=True)
         existing = client_data["current_products"]
         for cat, prods in PRODUCT_CATEGORIES.items():
-            st.markdown(f"**{cat}**")
-            cols = st.columns(2)
-            for i, p in enumerate(prods):
-                badge = "✅" if p in existing else "⬜"
-                cols[i % 2].markdown(f"{badge} {p.split(' - ', 1)[-1] if ' - ' in p else p}")
+            st.markdown(f'<p class="eyebrow" style="margin-top:0.9rem">{cat}</p>', unsafe_allow_html=True)
+            pills = ""
+            for p in prods:
+                short = p.split(" - ", 1)[-1] if " - " in p else p
+                cls   = "pp-on" if p in existing else "pp-off"
+                dot   = "●" if p in existing else "○"
+                pills += f'<span class="ppill {cls}">{dot}&nbsp;{short}</span>'
+            st.markdown(f'<div style="display:flex;flex-wrap:wrap;gap:2px;margin-bottom:0.3rem">{pills}</div>', unsafe_allow_html=True)
 
-        st.divider()
-        st.markdown("#### Cross-Sell Opportunity Scores")
+    with col_chart:
+        st.markdown('<p class="panel-hdr">Cross-Sell Opportunity Scores</p>', unsafe_allow_html=True)
+        df_sc2 = pd.DataFrame([{
+            "Product":  s["product"],
+            "Score":    s["score"],
+            "Category": product_category(s["product"]),
+            "Status":   "Enrolled" if s["already_enrolled"] else score_label(s["score"]),
+        } for s in scored]).sort_values("Score")
 
-        # Horizontal bar chart — 18 products, sorted by score
-        df_scored = pd.DataFrame([
-            {"Product": s["product"], "Score": s["score"],
-             "Category": product_category(s["product"]),
-             "Status": "Enrolled" if s["already_enrolled"] else score_label(s["score"])}
-            for s in scored
-        ]).sort_values("Score")
-
-        color_map = {"Enrolled": "#aaaaaa", "High": "#DB0011", "Medium": "#ff8800", "Low": "#ffccaa"}
-        fig_bar = px.bar(
-            df_scored, x="Score", y="Product", orientation="h",
-            color="Status", color_discrete_map=color_map,
+        cmap = {"Enrolled": "#2a2a2a", "High": RED, "Medium": AMBER, "Low": "#303030"}
+        fig_opp = px.bar(
+            df_sc2, x="Score", y="Product", orientation="h",
+            color="Status", color_discrete_map=cmap,
             category_orders={"Status": ["Enrolled", "Low", "Medium", "High"]},
         )
-        fig_bar.update_layout(
-            margin=dict(l=0, r=0, t=10, b=0),
-            height=460,
-            xaxis=dict(range=[0, 100], title="Score"),
-            yaxis_title="",
-            legend_title="Priority",
-        )
-        st.plotly_chart(fig_bar, use_container_width=True)
+        dark(fig_opp, height=500,
+             xaxis=dict(range=[0, 100], title="Score", gridcolor=BORDER, tickfont=dict(color=DIM)),
+             yaxis=dict(tickfont=dict(size=9, color=DIM), gridcolor="rgba(0,0,0,0)"),
+             legend=dict(title="Priority", font=dict(size=10, color=DIM), bgcolor="rgba(0,0,0,0)"))
+        st.plotly_chart(fig_opp, use_container_width=True)
 
     st.divider()
-    st.markdown("#### Call Brief — Top Opportunities")
-    st.caption("Click any opportunity to see the rationale and the bankers to loop in")
 
-    new_opps = [s for s in scored if not s["already_enrolled"] and s["score"] >= 40]
-    new_opps.sort(key=lambda x: x["score"], reverse=True)
+    # Call Brief
+    st.markdown('<p class="panel-hdr">Call Brief — Top Opportunities</p>', unsafe_allow_html=True)
+    st.caption("Expand any row to see rationale and the bankers to loop in")
+
+    new_opps = sorted(
+        [s for s in scored if not s["already_enrolled"] and s["score"] >= 40],
+        key=lambda x: x["score"], reverse=True
+    )
 
     if not new_opps:
         st.info("This client is fully enrolled or no high-confidence opportunities exist above the threshold.")
     else:
         for opp in new_opps[:8]:
-            label_color = {"High": "🟢", "Medium": "🟡", "Low": "⚪"}[score_label(opp["score"])]
+            lbl = score_label(opp["score"])
             with st.expander(
-                f"{label_color} **{opp['product']}** — Score {opp['score']}/100  ·  ~${opp['estimated_revenue_usd_k']:,}K",
+                f"{opp['product']}   ·   {opp['score']}/100   ·   ${opp['estimated_revenue_usd_k']:,}K   ·   {lbl}",
                 expanded=opp["score"] >= 70,
             ):
                 bankers = get_bankers_for_opportunity(client_data, opp["product"])
+                b_col, r_col = st.columns(2)
 
-                b_col, r_col = st.columns([1, 1])
-                with b_col:
-                    st.markdown("**Relationship Manager**")
-                    rm_name, rm_title = bankers["rm"]
-                    st.markdown(f"👤 **{rm_name}**  \n_{rm_title}_")
+                rm_n, rm_t = bankers["rm"]
+                b_col.markdown(banker_card("Relationship Manager", rm_n, rm_t), unsafe_allow_html=True)
 
-                with r_col:
-                    st.markdown("**Product Specialist(s)**")
-                    for spec_name, spec_title in bankers["specialists"][:2]:
-                        st.markdown(f"👤 **{spec_name}**  \n_{spec_title}_")
+                for sn, st_ in bankers["specialists"][:2]:
+                    r_col.markdown(banker_card("Product Specialist", sn, st_), unsafe_allow_html=True)
 
-                st.markdown("---")
-                st.markdown("**Why this opportunity:**")
-                for point in opp["rationale"]:
-                    st.markdown(f"- {point}")
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.markdown("**Why this opportunity**")
+                for pt in opp["rationale"]:
+                    st.markdown(f"- {pt}")
 
                 if opp["score"] >= 70:
-                    st.success("**Recommended action:** Schedule intro with product specialist this quarter")
+                    st.success("Recommended action: Schedule intro with product specialist this quarter")
                 elif opp["score"] >= 40:
-                    st.warning("**Recommended action:** Qualify further in next relationship review")
+                    st.warning("Recommended action: Qualify further in next relationship review")
