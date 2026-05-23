@@ -5,14 +5,74 @@ import pandas as pd
 
 random.seed(42)
 
+# ── Banker rosters ─────────────────────────────────────────────────────────────
+# Relationship Managers by sector coverage
+RELATIONSHIP_MANAGERS = {
+    "Food & Beverage":    [("Sarah Chen", "MD, CIB Coverage"), ("Michael Torres", "Director, CIB Coverage"), ("Priya Nair", "VP, CIB Coverage")],
+    "Agriculture":        [("James Whitfield", "MD, Agribusiness Coverage"), ("Laura Simmons", "Director, CIB Coverage")],
+    "Technology":         [("David Park", "MD, TMT Coverage"), ("Nina Patel", "Director, TMT Coverage"), ("Ryan Okafor", "VP, TMT Coverage")],
+    "Pharmaceuticals":    [("Catherine Lowe", "MD, Healthcare Coverage"), ("Marcus Webb", "Director, Healthcare Coverage")],
+    "Energy":             [("Robert Haines", "MD, Energy Coverage"), ("Alicia Moreno", "Director, Energy Coverage"), ("Tom Lindqvist", "VP, Natural Resources")],
+    "Chemicals":          [("George Stafford", "MD, Industrials Coverage"), ("Angela Kim", "Director, Chemicals Coverage")],
+    "Manufacturing":      [("Philip Osei", "MD, Industrials Coverage"), ("Hannah Bryce", "Director, Manufacturing Coverage"), ("Stefan Nowak", "VP, Industrials Coverage")],
+    "Retail":             [("Jessica Flynn", "MD, Consumer Coverage"), ("Carlos Espinoza", "Director, Consumer Coverage")],
+    "Construction":       [("Andrew MacPherson", "MD, Infrastructure Coverage"), ("Mei Lin", "Director, Construction Coverage")],
+    "Apparel":            [("Olivia Grant", "MD, Consumer Coverage"), ("Kevin Chandra", "Director, Retail Coverage")],
+    "Mining":             [("Samuel Obi", "MD, Natural Resources Coverage"), ("Rachel Thorpe", "Director, Mining Coverage")],
+    "Infrastructure":     [("Brian Kowalski", "MD, Infrastructure Coverage"), ("Fatima Al-Rashid", "Director, Infrastructure Coverage")],
+    "Financial Services": [("William Hargreaves", "MD, FIG Coverage"), ("Diane Cho", "Director, FIG Coverage")],
+}
+
+# Product Specialists by product line
+PRODUCT_SPECIALISTS = {
+    "GPS - Current Accounts":       [("Jonathan Reeves", "MD, GPS Sales"), ("Amara Diallo", "Director, Transaction Banking Sales")],
+    "GPS - Savings & Deposits":     [("Jonathan Reeves", "MD, GPS Sales"), ("Sophie Eriksson", "VP, Deposits & Liquidity Sales")],
+    "GPS - Term Deposits":          [("Sophie Eriksson", "VP, Deposits & Liquidity Sales"), ("Jonathan Reeves", "MD, GPS Sales")],
+    "GPS - Liquidity & Channel":    [("Maya Goldstein", "MD, Liquidity Solutions"), ("Jonathan Reeves", "MD, GPS Sales")],
+    "GPS - International Payments": [("Diego Ramirez", "MD, Payments Sales"), ("Amara Diallo", "Director, Transaction Banking Sales")],
+    "GPS - Domestic Payments":      [("Diego Ramirez", "MD, Payments Sales"), ("Lena Hoffmann", "VP, Payments Solutions")],
+    "GPS - Cards":                  [("Fiona MacLeod", "Director, Commercial Cards"), ("Diego Ramirez", "MD, Payments Sales")],
+    "GM - Forex - Cash":            [("Alexander Novak", "MD, FX Sales"), ("Chloe Beaumont", "Director, FX Structuring"), ("Patrick Daly", "VP, FX Sales")],
+    "GM - FOREX - TFX":             [("Patrick Daly", "VP, FX Sales"), ("Alexander Novak", "MD, FX Sales")],
+    "GM - Futures":                 [("Raj Krishnamurthy", "MD, Commodities & Derivatives"), ("Isabelle Fontaine", "Director, Structured Derivatives")],
+    "GTS - Supply Chain Solutions": [("Trevor Blake", "MD, GTS Sales"), ("Yuki Tanaka", "Director, Supply Chain Finance"), ("Claudia Vega", "VP, GTS Sales")],
+    "GTS - Receivables Finance":    [("Trevor Blake", "MD, GTS Sales"), ("Omar Hassan", "Director, Receivables Finance"), ("Claudia Vega", "VP, GTS Sales")],
+    "GTS - Documentary Trade":      [("Sandra Petrov", "MD, Documentary Trade"), ("Yuki Tanaka", "Director, Supply Chain Finance")],
+    "GTS - Trade Loans":            [("Trevor Blake", "MD, GTS Sales"), ("Sandra Petrov", "MD, Documentary Trade"), ("Omar Hassan", "Director, Receivables Finance")],
+    "GTS - Guarantees":             [("Sandra Petrov", "MD, Documentary Trade"), ("Claudia Vega", "VP, GTS Sales")],
+    "GTS - CSTF":                   [("Nathaniel Cross", "MD, Commodity-Structured Trade"), ("Raj Krishnamurthy", "MD, Commodities & Derivatives")],
+    "Lending - Corporate Lending":  [("Eleanor Hayes", "MD, Corporate Lending"), ("Marcus Webb", "Director, Healthcare Coverage"), ("Philip Osei", "MD, Industrials Coverage")],
+    "IB - DCM IG":                  [("Victoria Sterling", "MD, DCM"), ("Harrison Cole", "Director, Debt Capital Markets"), ("Isabelle Fontaine", "Director, Structured Derivatives")],
+}
+
 GTS_PRODUCTS = [
-    "Supply Chain Finance",
-    "Receivables Purchase",
-    "Documentary Credits",
-    "Trade Loans",
-    "FX Hedging",
-    "Bank Guarantees",
+    "GPS - Current Accounts",
+    "GPS - Savings & Deposits",
+    "GPS - Term Deposits",
+    "GPS - Liquidity & Channel",
+    "GPS - International Payments",
+    "GPS - Domestic Payments",
+    "GPS - Cards",
+    "GM - Forex - Cash",
+    "GM - FOREX - TFX",
+    "GM - Futures",
+    "GTS - Supply Chain Solutions",
+    "GTS - Receivables Finance",
+    "GTS - Documentary Trade",
+    "GTS - Trade Loans",
+    "GTS - Guarantees",
+    "GTS - CSTF",
+    "Lending - Corporate Lending",
+    "IB - DCM IG",
 ]
+
+PRODUCT_CATEGORIES = {
+    "GPS": [p for p in GTS_PRODUCTS if p.startswith("GPS")],
+    "GM": [p for p in GTS_PRODUCTS if p.startswith("GM")],
+    "GTS": [p for p in GTS_PRODUCTS if p.startswith("GTS")],
+    "Lending": [p for p in GTS_PRODUCTS if p.startswith("Lending")],
+    "IB": [p for p in GTS_PRODUCTS if p.startswith("IB")],
+}
 
 # ── US Domestic corporates ─────────────────────────────────────────────────────
 US_CLIENTS_RAW = [
@@ -151,9 +211,11 @@ INTL_CLIENTS_RAW = [c for c in INTL_CLIENTS_RAW if c[4] > 0]
 
 def _build_client(row, is_intl: bool) -> dict:
     name, sector, hq, geos, rev, trade, dso, dpo, suppliers, fx, govt, seasonal = row
-    n_products = random.randint(1, 3)
+    n_products = random.randint(1, 4)
     eligible = [p for p in GTS_PRODUCTS]
     current = random.sample(eligible, min(n_products, len(eligible)))
+    rm_pool = RELATIONSHIP_MANAGERS.get(sector, [("Alex Johnson", "MD, CIB Coverage")])
+    rm = rm_pool[random.randint(0, len(rm_pool) - 1)]
     return {
         "client": name,
         "sector": sector,
@@ -170,7 +232,17 @@ def _build_client(row, is_intl: bool) -> dict:
         "current_products": current,
         "relationship_years": random.randint(1, 12),
         "client_type": "International Subsidiary" if is_intl else "US Domestic",
+        "relationship_manager": rm[0],
+        "rm_title": rm[1],
     }
+
+
+def get_bankers_for_opportunity(client: dict, product: str) -> dict:
+    """Return RM and product specialist(s) for a given client + product."""
+    rm_pool = RELATIONSHIP_MANAGERS.get(client["sector"], [("Alex Johnson", "MD, CIB Coverage")])
+    rm = (client["relationship_manager"], client["rm_title"])
+    specialists = PRODUCT_SPECIALISTS.get(product, [("Trevor Blake", "MD, GTS Sales")])
+    return {"rm": rm, "specialists": specialists}
 
 
 CLIENTS = (

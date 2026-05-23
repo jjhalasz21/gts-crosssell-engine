@@ -4,8 +4,8 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from data import CLIENTS, GTS_PRODUCTS, get_portfolio_df
-from engine import analyze_client, get_all_opportunities, score_label
+from data import CLIENTS, GTS_PRODUCTS, PRODUCT_CATEGORIES, get_portfolio_df, get_bankers_for_opportunity
+from engine import analyze_client, get_all_opportunities, score_label, product_category
 
 st.set_page_config(
     page_title="GTS Cross-Sell Intelligence",
@@ -42,8 +42,8 @@ with st.sidebar:
         "https://upload.wikimedia.org/wikipedia/commons/thumb/a/aa/HSBC_logo_%282018%29.svg/320px-HSBC_logo_%282018%29.svg.png",
         width=140,
     )
-    st.markdown("## GTS Cross-Sell Engine")
-    st.caption("Global Trade Solutions · LatAm Portfolio")
+    st.markdown("## Cross-Sell Engine")
+    st.caption("US & International Subsidiary Portfolio")
     st.divider()
 
     st.markdown('<p class="sidebar-header">Filters</p>', unsafe_allow_html=True)
@@ -56,7 +56,11 @@ with st.sidebar:
 
     min_score = st.slider("Min Opportunity Score", 0, 100, 40)
 
-    products_filter = st.multiselect("Product", GTS_PRODUCTS, default=GTS_PRODUCTS)
+    st.markdown('<p class="sidebar-header">Product Lines</p>', unsafe_allow_html=True)
+    selected_categories = st.multiselect(
+        "Business Line", list(PRODUCT_CATEGORIES.keys()), default=list(PRODUCT_CATEGORIES.keys())
+    )
+    products_filter = [p for cat in selected_categories for p in PRODUCT_CATEGORIES.get(cat, [])]
 
     st.divider()
     st.caption("Mock data · For illustrative purposes only")
@@ -206,6 +210,7 @@ with tab_pipeline:
             top5 = filtered_opps[:3]
 
         for opp in top5:
+            client_data_opp = next((c for c in CLIENTS if c["client"] == opp["client"]), None)
             with st.expander(
                 f"**{opp['client']}** — {opp['product']}  |  Score: {opp['score']}  |  ~${opp['estimated_revenue_usd_k']:,}K",
                 expanded=False,
@@ -214,6 +219,15 @@ with tab_pipeline:
                 c1.metric("Opportunity Score", f"{opp['score']} / 100")
                 c2.metric("Est. Annual Revenue", f"${opp['estimated_revenue_usd_k']:,}K")
                 c3.metric("Relationship", f"{opp['relationship_years']} years")
+
+                if client_data_opp:
+                    bankers = get_bankers_for_opportunity(client_data_opp, opp["product"])
+                    b1, b2 = st.columns(2)
+                    rm_name, rm_title = bankers["rm"]
+                    b1.markdown(f"**RM:** 👤 {rm_name}  \n_{rm_title}_")
+                    if bankers["specialists"]:
+                        spec_name, spec_title = bankers["specialists"][0]
+                        b2.markdown(f"**Product Specialist:** 👤 {spec_name}  \n_{spec_title}_")
 
                 st.markdown("**Why this opportunity:**")
                 for point in opp["rationale"]:
@@ -248,38 +262,44 @@ with tab_client:
         st.markdown("  ".join(f"`{g}`" for g in client_data["trade_geographies"]))
 
     with col_products:
-        st.markdown("#### Product Status")
+        st.markdown("#### Product Coverage")
         existing = client_data["current_products"]
-        for p in GTS_PRODUCTS:
-            badge = "✅ **Enrolled**" if p in existing else "⬜ Not enrolled"
-            st.markdown(f"{badge} — {p}")
+        for cat, prods in PRODUCT_CATEGORIES.items():
+            st.markdown(f"**{cat}**")
+            cols = st.columns(2)
+            for i, p in enumerate(prods):
+                badge = "✅" if p in existing else "⬜"
+                cols[i % 2].markdown(f"{badge} {p.split(' - ', 1)[-1] if ' - ' in p else p}")
 
         st.divider()
         st.markdown("#### Cross-Sell Opportunity Scores")
 
-        # Radar chart
-        categories = [s["product"] for s in scored]
-        values = [s["score"] for s in scored]
-        values_closed = values + [values[0]]
-        categories_closed = categories + [categories[0]]
+        # Horizontal bar chart — 18 products, sorted by score
+        df_scored = pd.DataFrame([
+            {"Product": s["product"], "Score": s["score"],
+             "Category": product_category(s["product"]),
+             "Status": "Enrolled" if s["already_enrolled"] else score_label(s["score"])}
+            for s in scored
+        ]).sort_values("Score")
 
-        fig_radar = go.Figure(go.Scatterpolar(
-            r=values_closed,
-            theta=categories_closed,
-            fill="toself",
-            fillcolor="rgba(219,0,17,0.15)",
-            line=dict(color="#DB0011", width=2),
-        ))
-        fig_radar.update_layout(
-            polar=dict(radialaxis=dict(visible=True, range=[0, 100])),
-            margin=dict(l=20, r=20, t=20, b=20),
-            height=320,
+        color_map = {"Enrolled": "#aaaaaa", "High": "#DB0011", "Medium": "#ff8800", "Low": "#ffccaa"}
+        fig_bar = px.bar(
+            df_scored, x="Score", y="Product", orientation="h",
+            color="Status", color_discrete_map=color_map,
+            category_orders={"Status": ["Enrolled", "Low", "Medium", "High"]},
         )
-        st.plotly_chart(fig_radar, use_container_width=True)
+        fig_bar.update_layout(
+            margin=dict(l=0, r=0, t=10, b=0),
+            height=460,
+            xaxis=dict(range=[0, 100], title="Score"),
+            yaxis_title="",
+            legend_title="Priority",
+        )
+        st.plotly_chart(fig_bar, use_container_width=True)
 
     st.divider()
     st.markdown("#### Call Brief — Top Opportunities")
-    st.caption("Use this to prepare for your next client conversation")
+    st.caption("Click any opportunity to see the rationale and the bankers to loop in")
 
     new_opps = [s for s in scored if not s["already_enrolled"] and s["score"] >= 40]
     new_opps.sort(key=lambda x: x["score"], reverse=True)
@@ -287,16 +307,31 @@ with tab_client:
     if not new_opps:
         st.info("This client is fully enrolled or no high-confidence opportunities exist above the threshold.")
     else:
-        for opp in new_opps[:3]:
+        for opp in new_opps[:8]:
             label_color = {"High": "🟢", "Medium": "🟡", "Low": "⚪"}[score_label(opp["score"])]
             with st.expander(
                 f"{label_color} **{opp['product']}** — Score {opp['score']}/100  ·  ~${opp['estimated_revenue_usd_k']:,}K",
                 expanded=opp["score"] >= 70,
             ):
-                st.markdown("**Talking points for client conversation:**")
+                bankers = get_bankers_for_opportunity(client_data, opp["product"])
+
+                b_col, r_col = st.columns([1, 1])
+                with b_col:
+                    st.markdown("**Relationship Manager**")
+                    rm_name, rm_title = bankers["rm"]
+                    st.markdown(f"👤 **{rm_name}**  \n_{rm_title}_")
+
+                with r_col:
+                    st.markdown("**Product Specialist(s)**")
+                    for spec_name, spec_title in bankers["specialists"][:2]:
+                        st.markdown(f"👤 **{spec_name}**  \n_{spec_title}_")
+
+                st.markdown("---")
+                st.markdown("**Why this opportunity:**")
                 for point in opp["rationale"]:
                     st.markdown(f"- {point}")
+
                 if opp["score"] >= 70:
-                    st.success("**Action:** Schedule product presentation this quarter")
+                    st.success("**Recommended action:** Schedule intro with product specialist this quarter")
                 elif opp["score"] >= 40:
-                    st.warning("**Action:** Qualify further in next relationship review")
+                    st.warning("**Recommended action:** Qualify further in next relationship review")
