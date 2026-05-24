@@ -5,6 +5,7 @@ backgroundColor        = "#0e0e0e"
 secondaryBackgroundColor = "#161616"
 textColor              = "#f0f0f0"
 font                   = "sans serif"
+# IBM Plex Sans loaded via Google Fonts in app.py CSS
 
 [server]
 headless = true

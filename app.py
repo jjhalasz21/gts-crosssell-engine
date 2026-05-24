@@ -1,178 +1,217 @@
-"""GTS Cross-Sell Intelligence Engine — Portfolio demo for HSBC Sales Program Manager role."""
+"""
+app.py — GTS Structured Trade Program Cockpit  (v2)
+
+Reframed from a cross-sell scorer into a program-management cockpit that mirrors
+the Sales Program Manager (GTS) role: managing live RF/SCF programs for GNB & IMM
+clients, mobilising internal stakeholders, assuring revenue, surfacing expansion.
+
+Tabs (deliberate order):
+  1. Program Cockpit    — the day-job: live facilities, health, revenue assurance, cases
+  2. Cross-Sell Pipeline — EV-ranked expansion with explainable score waterfalls
+  3. Client Deep Dive   — single-client 360 + AI-generated call brief
+  4. Portfolio Overview  — book-level analytics
+"""
 
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from data import CLIENTS, GTS_PRODUCTS, PRODUCT_CATEGORIES, get_portfolio_df, get_bankers_for_opportunity
-from engine import analyze_client, get_all_opportunities, score_label, product_category
 
+import data
+import engine
+from ai_brief import build_brief_prompt, generate_brief
+
+# ── Page config ────────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="GTS Cross-Sell Intelligence",
-    page_icon="🏦",
+    page_title="GTS Program Cockpit",
+    page_icon="■",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
 # ── Design tokens ──────────────────────────────────────────────────────────────
-RED      = "#DB0011"
-BG_CARD  = "#161616"
-BG_CARD2 = "#1c1c1c"
-BORDER   = "#2a2a2a"
-TXT      = "#f0f0f0"
-DIM      = "#777777"
-GREEN    = "#00d26a"
-AMBER    = "#f59e0b"
+RED   = "#DB0011"
+AMBER = "#E8A317"
+GREEN = "#3BAA6E"
+DIM   = "#555555"
+INK   = "#f0f0f0"
+CARD  = "#161616"
+BORDER = "#252525"
 
 DARK_CHART = dict(
     plot_bgcolor  = "rgba(0,0,0,0)",
     paper_bgcolor = "rgba(0,0,0,0)",
-    font          = dict(color=TXT, size=12),
+    font          = dict(color=INK, size=12),
     margin        = dict(l=4, r=4, t=28, b=4),
 )
 
 # ── Global CSS ─────────────────────────────────────────────────────────────────
-st.markdown("""
+st.markdown(f"""
 <style>
-/* ── Layout ─────────────────────────────────────────── */
-.block-container { padding: 2rem 2.5rem 4rem; max-width: 1440px; }
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
-/* ── Tabs ───────────────────────────────────────────── */
-[data-baseweb="tab-list"] {
-  gap: 0.25rem;
-  border-bottom: 1px solid #252525;
-  padding-bottom: 0;
-}
-[data-baseweb="tab"] {
-  padding: 0.55rem 1.4rem;
-  font-size: 0.83rem;
-  font-weight: 500;
-  letter-spacing: 0.4px;
-  border-radius: 6px 6px 0 0;
-  color: #777 !important;
-}
-[aria-selected="true"] { color: #f0f0f0 !important; }
+html, body, [class*="css"] {{ font-family: 'IBM Plex Sans', system-ui, sans-serif; }}
 
-/* ── KPI cards ──────────────────────────────────────── */
-.kpi {
-  background: #161616;
-  border: 1px solid #252525;
-  border-top: 3px solid #DB0011;
-  border-radius: 8px;
-  padding: 1.2rem 1.4rem 1.1rem;
-}
-.kpi-lbl {
-  font-size: 0.65rem; font-weight: 700; color: #666;
-  text-transform: uppercase; letter-spacing: 1.4px;
-  margin-bottom: 0.4rem;
-}
-.kpi-val {
-  font-size: 1.75rem; font-weight: 700; color: #f0f0f0; line-height: 1.1;
-}
-.kpi-sub { font-size: 0.72rem; color: #555; margin-top: 0.25rem; }
+.stApp {{
+  background:
+    radial-gradient(ellipse 1400px 500px at 85% -5%, #1c0406 0%, transparent 52%),
+    #0e0e0e;
+}}
 
-/* ── Section / panel labels ─────────────────────────── */
-.eyebrow {
-  font-size: 0.63rem; font-weight: 700; color: #DB0011;
-  text-transform: uppercase; letter-spacing: 2px;
-  margin: 0 0 0.5rem 0;
-}
-.panel-hdr {
-  font-size: 0.95rem; font-weight: 600; color: #f0f0f0;
-  margin: 0 0 1.1rem 0; padding-bottom: 0.55rem;
-  border-bottom: 1px solid #252525;
-}
+/* ── Tabs ─────────────────────────────────────────── */
+[data-baseweb="tab-list"] {{
+  gap: 0.2rem; border-bottom: 1px solid {BORDER}; padding-bottom: 0;
+}}
+[data-baseweb="tab"] {{
+  padding: 0.6rem 1.4rem; font-size: 0.82rem; font-weight: 500;
+  letter-spacing: 0.3px; border-radius: 6px 6px 0 0; color: {DIM} !important;
+  font-family: 'IBM Plex Mono', monospace;
+}}
+[aria-selected="true"] {{ color: {INK} !important; }}
 
-/* ── Priority badges ────────────────────────────────── */
-.badge {
-  display: inline-block; padding: 3px 11px; border-radius: 20px;
-  font-size: 0.68rem; font-weight: 700; letter-spacing: 0.6px;
-}
-.b-high   { background: rgba(0,210,106,0.11); color: #00d26a; border: 1px solid rgba(0,210,106,0.28); }
-.b-medium { background: rgba(245,158,11,0.11); color: #f59e0b; border: 1px solid rgba(245,158,11,0.28); }
-.b-low    { background: rgba(120,120,120,0.1); color: #666; border: 1px solid #2a2a2a; }
+/* ── Brand header ─────────────────────────────────── */
+.brand {{ display:flex; align-items:flex-start; gap:14px; padding:4px 0 0 0; }}
+.bmark {{
+  width:22px; height:22px; background:{RED}; margin-top:4px; flex-shrink:0;
+  clip-path: polygon(50% 0,100% 50%,50% 100%,0 50%,50% 0,18% 50%,50% 82%,82% 50%,50% 18%);
+}}
+.btitle {{
+  font-size:1.45rem; font-weight:700; color:{INK}; letter-spacing:-0.3px; line-height:1.15;
+}}
+.bsub {{
+  font-size:0.78rem; color:{DIM}; font-family:'IBM Plex Mono',monospace; margin-top:2px;
+}}
+.asof {{
+  float:right; color:{DIM}; font-family:'IBM Plex Mono',monospace; font-size:0.74rem;
+  margin-top:6px;
+}}
 
-/* ── Product pills ──────────────────────────────────── */
-.ppill {
-  display: inline-flex; align-items: center; gap: 5px;
-  padding: 4px 10px; border-radius: 5px; font-size: 0.77rem;
-  margin: 2px 2px; font-weight: 500; white-space: nowrap;
-}
-.pp-on  { background: rgba(219,0,17,0.09); color: #ff4455; border: 1px solid rgba(219,0,17,0.22); }
-.pp-off { background: #171717; color: #444; border: 1px solid #252525; }
+/* ── KPI cards ────────────────────────────────────── */
+.kpi {{
+  background: linear-gradient(160deg, #181818, #121212);
+  border: 1px solid {BORDER}; border-left: 3px solid {RED};
+  border-radius: 10px; padding: 1rem 1.1rem;
+}}
+.kpi-lbl {{
+  color: {DIM}; font-size: 0.67rem; text-transform: uppercase;
+  letter-spacing: 1.3px; font-family: 'IBM Plex Mono', monospace;
+}}
+.kpi-val {{
+  color: {INK}; font-size: 1.75rem; font-weight: 700; line-height: 1.1; margin-top: 4px;
+}}
+.kpi-sub {{ font-size: 0.76rem; margin-top: 2px; }}
 
-/* ── Banker cards ───────────────────────────────────── */
-.bcard {
-  background: #1c1c1c;
-  border: 1px solid #252525;
-  border-left: 3px solid #DB0011;
-  border-radius: 7px;
-  padding: 0.8rem 1rem;
-  margin-bottom: 0.45rem;
-}
-.bcard-role  { font-size: 0.62rem; font-weight: 700; color: #DB0011;
-               text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 5px; }
-.bcard-name  { font-size: 0.9rem; font-weight: 600; color: #f0f0f0; }
-.bcard-title { font-size: 0.73rem; color: #777; margin-top: 2px; }
+/* ── Section eyebrow ──────────────────────────────── */
+.eye {{
+  font-family: 'IBM Plex Mono', monospace; color: {DIM}; font-size: 0.7rem;
+  text-transform: uppercase; letter-spacing: 1.8px; margin: 0 0 8px 0;
+}}
 
-/* ── Info strip ─────────────────────────────────────── */
-.istrip {
-  background: #161616;
-  border: 1px solid #252525;
-  border-radius: 9px;
-  padding: 1.1rem 1.4rem;
-  margin-bottom: 1.25rem;
-}
-.irow { display: flex; flex-wrap: wrap; gap: 2rem; margin-top: 0.6rem; }
-.iitem { display: flex; flex-direction: column; }
-.ilbl  { font-size: 0.62rem; color: #555; text-transform: uppercase; letter-spacing: 1.1px; }
-.ival  { font-size: 0.9rem; font-weight: 600; color: #f0f0f0; margin-top: 1px; }
-.ctag  {
-  display: inline-block; background: #1c1c1c; border: 1px solid #252525;
-  border-radius: 4px; padding: 2px 9px; font-size: 0.73rem; color: #aaa;
-  margin: 2px; font-family: monospace; letter-spacing: 0.5px;
-}
+/* ── Panel header ─────────────────────────────────── */
+.phdr {{
+  font-size: 0.93rem; font-weight: 600; color: {INK};
+  margin: 0 0 0.9rem 0; padding-bottom: 0.5rem; border-bottom: 1px solid {BORDER};
+}}
 
-/* ── Sidebar ────────────────────────────────────────── */
-[data-testid="stSidebar"] { background: #0a0a0a !important; border-right: 1px solid #1e1e1e; }
-.slbl {
-  font-size: 0.62rem; font-weight: 700; color: #DB0011;
-  text-transform: uppercase; letter-spacing: 1.5px;
-  margin: 1.1rem 0 0.3rem 0;
-}
+/* ── Verdict pills ────────────────────────────────── */
+.pill {{
+  display:inline-block; padding:2px 10px; border-radius:999px;
+  font-family:'IBM Plex Mono',monospace; font-size:0.7rem; font-weight:500;
+}}
+.pill-red   {{ background:rgba(219,0,17,0.15); color:#ff6b78; border:1px solid rgba(219,0,17,0.35); }}
+.pill-amber {{ background:rgba(232,163,23,0.13); color:{AMBER}; border:1px solid rgba(232,163,23,0.35); }}
+.pill-green {{ background:rgba(59,170,110,0.13); color:{GREEN}; border:1px solid rgba(59,170,110,0.35); }}
 
-/* ── Expanders ──────────────────────────────────────── */
-[data-testid="stExpander"] {
-  background: #141414 !important;
-  border: 1px solid #252525 !important;
-  border-radius: 8px !important;
-  margin-bottom: 0.45rem;
-}
+/* ── Priority badges (pipeline) ───────────────────── */
+.badge {{
+  display:inline-block; padding:3px 11px; border-radius:999px;
+  font-family:'IBM Plex Mono',monospace; font-size:0.68rem; font-weight:600;
+}}
+.b-high   {{ background:rgba(0,210,106,0.1); color:#00d26a; border:1px solid rgba(0,210,106,0.28); }}
+.b-medium {{ background:rgba(232,163,23,0.1); color:{AMBER}; border:1px solid rgba(232,163,23,0.28); }}
+.b-low    {{ background:rgba(120,120,120,0.1); color:#555; border:1px solid {BORDER}; }}
 
-/* ── Divider ────────────────────────────────────────── */
-hr { border-color: #222 !important; margin: 1.75rem 0 !important; }
+/* ── Flag line ────────────────────────────────────── */
+.flag {{
+  font-family: 'IBM Plex Mono', monospace; font-size: 0.79rem; color: #c0c0c0;
+}}
+
+/* ── Banker card ──────────────────────────────────── */
+.bcard {{
+  background: #1c1c1c; border: 1px solid {BORDER}; border-left: 3px solid {RED};
+  border-radius: 7px; padding: 0.75rem 1rem; margin-bottom: 0.4rem;
+}}
+.bcard-role  {{
+  font-size: 0.62rem; font-weight: 700; color: {RED};
+  text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 4px;
+  font-family: 'IBM Plex Mono', monospace;
+}}
+.bcard-name  {{ font-size: 0.88rem; font-weight: 600; color: {INK}; }}
+.bcard-title {{ font-size: 0.72rem; color: {DIM}; margin-top: 2px; }}
+
+/* ── Info strip ───────────────────────────────────── */
+.istrip {{
+  background: {CARD}; border: 1px solid {BORDER}; border-radius: 9px;
+  padding: 1rem 1.3rem; margin-bottom: 1.2rem;
+}}
+.irow {{ display:flex; flex-wrap:wrap; gap:1.75rem; margin-top:0.6rem; }}
+.ii   {{ display:flex; flex-direction:column; }}
+.ilbl {{ font-size:0.62rem; color:{DIM}; text-transform:uppercase; letter-spacing:1px;
+         font-family:'IBM Plex Mono',monospace; }}
+.ival {{ font-size:0.9rem; font-weight:600; color:{INK}; margin-top:1px; }}
+.ctag {{
+  display:inline-block; background:#1c1c1c; border:1px solid {BORDER};
+  border-radius:4px; padding:2px 9px; font-size:0.72rem; color:#aaa;
+  margin:2px; font-family:'IBM Plex Mono',monospace;
+}}
+
+/* ── Product pills ────────────────────────────────── */
+.ppill {{
+  display:inline-flex; align-items:center; gap:5px; padding:3px 9px;
+  border-radius:5px; font-size:0.76rem; margin:2px; font-weight:500;
+}}
+.pp-on  {{ background:rgba(219,0,17,0.09); color:#ff4455; border:1px solid rgba(219,0,17,0.22); }}
+.pp-off {{ background:#171717; color:#444; border:1px solid {BORDER}; }}
+
+/* ── Sidebar ──────────────────────────────────────── */
+[data-testid="stSidebar"] {{ background: #0d0d0d !important; border-right: 1px solid #1e1e1e; }}
+.slbl {{
+  font-size: 0.62rem; font-weight: 700; color: {RED};
+  text-transform: uppercase; letter-spacing: 1.5px; margin: 1rem 0 0.25rem 0;
+  font-family: 'IBM Plex Mono', monospace;
+}}
+
+/* ── Expander ─────────────────────────────────────── */
+[data-testid="stExpander"] {{
+  background: #141414 !important; border: 1px solid {BORDER} !important;
+  border-radius: 8px !important; margin-bottom: 0.45rem;
+}}
+
+/* ── Misc ─────────────────────────────────────────── */
+hr {{ border-color: #222 !important; margin: 1.5rem 0 !important; }}
+.block-container {{ padding: 1.5rem 2.5rem 4rem; max-width: 1500px; }}
 </style>
 """, unsafe_allow_html=True)
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
-def kpi(label, value, sub=""):
-    sub_html = f'<div class="kpi-sub">{sub}</div>' if sub else ""
+
+def kpi_html(label, value, sub=None, sub_color=DIM):
+    s = f"<div class='kpi-sub' style='color:{sub_color}'>{sub}</div>" if sub else ""
     return f"""<div class="kpi">
   <div class="kpi-lbl">{label}</div>
-  <div class="kpi-val">{value}</div>
-  {sub_html}
+  <div class="kpi-val">{value}</div>{s}
 </div>"""
 
 
-def badge(label):
+def verdict_pill(v):
+    cls = {"Action Required": "pill-red", "Watch": "pill-amber", "Healthy": "pill-green"}[v]
+    return f"<span class='pill {cls}'>{v}</span>"
+
+
+def priority_badge(label):
     cls = {"High": "b-high", "Medium": "b-medium", "Low": "b-low"}.get(label, "b-low")
-    return f'<span class="badge {cls}">{label}</span>'
-
-
-def dark(fig, **extra):
-    fig.update_layout(**DARK_CHART, **extra)
-    return fig
+    return f"<span class='badge {cls}'>{label}</span>"
 
 
 def banker_card(role, name, title):
@@ -183,305 +222,470 @@ def banker_card(role, name, title):
 </div>"""
 
 
+def dark(fig, **kw):
+    fig.update_layout(**DARK_CHART, **kw)
+    return fig
+
+
+# ── Brand header ───────────────────────────────────────────────────────────────
+st.markdown(f"""
+<div class="brand">
+  <div class="bmark"></div>
+  <div>
+    <span class="asof">DATA AS OF {data.AS_OF.strftime('%d %b %Y').upper()}</span>
+    <div class="btitle">GTS Structured Trade Program Cockpit</div>
+    <div class="bsub">Global Network Banking &amp; International Middle Market
+      &nbsp;·&nbsp; Receivables &amp; Supply Chain Finance</div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+st.write("")
+
+# ── Session state ──────────────────────────────────────────────────────────────
+if "focus_client" not in st.session_state:
+    st.session_state.focus_client = None
+
 # ── Sidebar ────────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.image(
-        "https://upload.wikimedia.org/wikipedia/commons/thumb/a/aa/HSBC_logo_%282018%29.svg/320px-HSBC_logo_%282018%29.svg.png",
-        width=130,
-    )
-    st.markdown("### Cross-Sell Engine")
-    st.caption("US & International Subsidiary Portfolio")
+    st.markdown('<p class="slbl">Logged in as</p>', unsafe_allow_html=True)
+    st.markdown("**J. Halász** · Sales Program Manager, GTS")
+    st.caption("My book · GNB & IMM · New York")
     st.divider()
 
-    st.markdown('<p class="slbl">Client Type</p>', unsafe_allow_html=True)
-    client_types = ["US Domestic", "International Subsidiary"]
-    selected_types = st.multiselect("Client Type", client_types, default=client_types, label_visibility="collapsed")
+    st.markdown('<p class="slbl">Segment</p>', unsafe_allow_html=True)
+    seg = st.multiselect("Segment", data.SEGMENTS, default=data.SEGMENTS, label_visibility="collapsed")
 
     st.markdown('<p class="slbl">Sector</p>', unsafe_allow_html=True)
-    sectors = sorted({c["sector"] for c in CLIENTS})
-    selected_sectors = st.multiselect("Sector", sectors, default=sectors, label_visibility="collapsed")
+    sectors_sel = st.multiselect("Sector", data.SECTORS, default=[], label_visibility="collapsed")
 
-    st.markdown('<p class="slbl">Min Opportunity Score</p>', unsafe_allow_html=True)
-    min_score = st.slider("Score", 0, 100, 40, label_visibility="collapsed")
+    st.markdown('<p class="slbl">Client Type</p>', unsafe_allow_html=True)
+    ctype = st.multiselect(
+        "Client type", ["US Domestic", "International Subsidiary"],
+        default=["US Domestic", "International Subsidiary"], label_visibility="collapsed"
+    )
+
+    st.markdown('<p class="slbl">Min Cross-Sell Score</p>', unsafe_allow_html=True)
+    min_score = st.slider("Score", 0, 100, 40, 5, label_visibility="collapsed")
 
     st.markdown('<p class="slbl">Business Line</p>', unsafe_allow_html=True)
-    selected_categories = st.multiselect(
-        "Business Line", list(PRODUCT_CATEGORIES.keys()),
-        default=list(PRODUCT_CATEGORIES.keys()), label_visibility="collapsed"
-    )
-    products_filter = [p for cat in selected_categories for p in PRODUCT_CATEGORIES.get(cat, [])]
+    lines = st.multiselect("Line", data.BUSINESS_LINES, default=data.BUSINESS_LINES, label_visibility="collapsed")
 
     st.divider()
     st.caption("Mock data · Illustrative purposes only")
 
 
 # ── Filter ─────────────────────────────────────────────────────────────────────
-filtered_clients = [
-    c for c in CLIENTS
-    if c["sector"] in selected_sectors and c["client_type"] in selected_types
-]
-all_opps     = get_all_opportunities(filtered_clients)
-filtered_opps = [o for o in all_opps if o["score"] >= min_score and o["product"] in products_filter]
+def _client_passes(c):
+    if c["segment"] not in seg:                                  return False
+    if sectors_sel and c["sector"] not in sectors_sel:           return False
+    if c["client_type"] not in ctype:                            return False
+    return True
+
+clients_f    = [c for c in data.CLIENTS if _client_passes(c)]
+client_ids_f = {c["id"] for c in clients_f}
+programs_f   = [p for p in data.PROGRAMS if p["client_id"] in client_ids_f]
 
 # ── Tabs ───────────────────────────────────────────────────────────────────────
-tab_dash, tab_pipe, tab_client = st.tabs([
-    "   Portfolio Overview   ",
-    "   Opportunity Pipeline   ",
-    "   Client Deep Dive   ",
+tab1, tab2, tab3, tab4 = st.tabs([
+    "  Program Cockpit  ",
+    "  Cross-Sell Pipeline  ",
+    "  Client Deep Dive  ",
+    "  Portfolio Overview  ",
 ])
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 1 — Portfolio Overview
+# TAB 1 — PROGRAM COCKPIT
 # ══════════════════════════════════════════════════════════════════════════════
-with tab_dash:
-    st.markdown('<p class="eyebrow">US & International Subsidiary · Trade Finance Portfolio</p>', unsafe_allow_html=True)
-    st.caption(f"{len(filtered_clients)} clients · {len(filtered_opps)} cross-sell opportunities identified")
-    st.markdown("<br>", unsafe_allow_html=True)
+with tab1:
+    summ = engine.portfolio_program_summary(programs_f)
 
-    total_vol   = sum(c["trade_volume_usd_m"] for c in filtered_clients)
-    rev_upside  = sum(o["estimated_revenue_usd_k"] for o in filtered_opps) / 1000
-    high_ct     = sum(1 for o in filtered_opps if o["score"] >= 70)
-    avg_prods   = sum(len(c["current_products"]) for c in filtered_clients) / max(len(filtered_clients), 1)
-
-    k1, k2, k3, k4 = st.columns(4, gap="medium")
-    k1.markdown(kpi("Total Trade Volume",          f"${total_vol:,.0f}M",  f"{len(filtered_clients)} clients"), unsafe_allow_html=True)
-    k2.markdown(kpi("Cross-Sell Revenue Upside",   f"${rev_upside:,.1f}M", "indicative annual"), unsafe_allow_html=True)
-    k3.markdown(kpi("High-Priority Opportunities", str(high_ct),            "score ≥ 70"), unsafe_allow_html=True)
-    k4.markdown(kpi("Avg Products / Client",       f"{avg_prods:.1f}",      f"of {len(GTS_PRODUCTS)} products"), unsafe_allow_html=True)
+    k1, k2, k3, k4, k5 = st.columns(5, gap="medium")
+    k1.markdown(kpi_html("Live Programs",      summ["n_programs"]), unsafe_allow_html=True)
+    k2.markdown(kpi_html("Total Limits",       f"${summ['total_limit_m']/1000:.1f}B",
+                          f"{summ['avg_utilization']*100:.0f}% utilized"), unsafe_allow_html=True)
+    k3.markdown(kpi_html("Expected Rev / mo",  f"${summ['expected_rev_k']/1000:.1f}M"), unsafe_allow_html=True)
+    k4.markdown(kpi_html("Revenue Leakage",    f"${summ['rev_leakage_k']/1000:.2f}M",
+                          "booked vs expected",
+                          "#ff6b78" if summ["rev_leakage_k"] > 0 else GREEN), unsafe_allow_html=True)
+    k5.markdown(kpi_html("Need Action",        str(summ["action_required"]),
+                          f"+{summ['watch']} on watch", "#ff6b78"), unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
     col_l, col_r = st.columns([3, 2], gap="large")
 
+    # Programs list — action first
     with col_l:
-        st.markdown('<p class="panel-hdr">Product Penetration by Client</p>', unsafe_allow_html=True)
-        matrix_rows = []
-        for c in filtered_clients:
-            row = {"Client": c["client"]}
-            for p in GTS_PRODUCTS:
-                row[p] = 1 if p in c["current_products"] else 0
-            matrix_rows.append(row)
-        df_mat = pd.DataFrame(matrix_rows).set_index("Client")
+        st.markdown('<p class="eye">Programs by health · action-first</p>', unsafe_allow_html=True)
+        rows = []
+        for p in programs_f:
+            h = engine.program_health(p)
+            rows.append({**p, "verdict": h["verdict"], "flags": h["flags"]})
+        order = {"Action Required": 0, "Watch": 1, "Healthy": 2}
+        rows.sort(key=lambda r: (order[r["verdict"]], -r["drawn_usd_m"]))
 
-        fig_heat = px.imshow(
-            df_mat,
-            color_continuous_scale=[[0, "#1a1a1a"], [1, RED]],
-            aspect="auto",
-            labels={"color": "Enrolled"},
-        )
-        fig_heat.update_traces(showscale=False)
-        dark(fig_heat, height=430,
-             xaxis=dict(tickangle=-35, tickfont=dict(size=9, color=DIM), gridcolor=BORDER),
-             yaxis=dict(tickfont=dict(size=9, color=DIM), gridcolor=BORDER))
-        st.plotly_chart(fig_heat, use_container_width=True)
+        for r in rows[:14]:
+            c1, c2 = st.columns([5, 1])
+            flag_html = "".join(
+                f" <span class='flag'>· {lbl}: {det}</span>"
+                for lbl, det, _ in r["flags"][:3]
+            )
+            c1.markdown(
+                f"<b>{r['client_name']}</b> &nbsp;"
+                f"<span class='flag'>{r['type']} · {r['program_id']} · "
+                f"${r['drawn_usd_m']:.0f}M / ${r['limit_usd_m']:.0f}M · "
+                f"{r['days_to_rollover']}d to rollover</span><br>"
+                + verdict_pill(r["verdict"]) + flag_html,
+                unsafe_allow_html=True,
+            )
+            if c2.button("Open", key=f"open_{r['program_id']}"):
+                st.session_state.focus_client = r["client_id"]
+                st.info(f"Loaded {r['client_name']} — open the Client Deep Dive tab.")
+            st.markdown("<hr style='margin:7px 0'>", unsafe_allow_html=True)
 
+    # Revenue assurance + cases
     with col_r:
-        st.markdown('<p class="panel-hdr">Avg Opportunity Score by Product</p>', unsafe_allow_html=True)
-        prod_scores = {}
-        for p in GTS_PRODUCTS:
-            s = [o["score"] for o in filtered_opps if o["product"] == p]
-            prod_scores[p] = sum(s) / len(s) if s else 0
+        st.markdown('<p class="phdr">Revenue Assurance · Booked vs Expected</p>', unsafe_allow_html=True)
+        ra = pd.DataFrame([{
+            "Client":   p["client_name"],
+            "Expected": p["expected_rev_k_month"],
+            "Booked":   p["booked_rev_k_month"],
+            "Variance": p["rev_variance_k"],
+        } for p in programs_f]).sort_values("Variance").head(10)
 
-        df_ps = pd.DataFrame([{"Product": k, "Score": v} for k, v in prod_scores.items()]).sort_values("Score")
-        fig_ps = px.bar(
-            df_ps, x="Score", y="Product", orientation="h",
-            color="Score",
-            color_continuous_scale=[[0, "#2a0005"], [0.5, "#7a0008"], [1, RED]],
-        )
-        dark(fig_ps, height=340, showlegend=False, coloraxis_showscale=False,
-             xaxis=dict(range=[0, 100], gridcolor=BORDER, tickfont=dict(color=DIM)),
-             yaxis=dict(tickfont=dict(size=9, color=DIM), gridcolor="rgba(0,0,0,0)"))
-        st.plotly_chart(fig_ps, use_container_width=True)
+        fig_ra = go.Figure()
+        fig_ra.add_bar(y=ra["Client"], x=ra["Expected"], orientation="h",
+                       name="Expected", marker_color=DIM)
+        fig_ra.add_bar(y=ra["Client"], x=ra["Booked"], orientation="h",
+                       name="Booked", marker_color=RED)
+        dark(fig_ra, barmode="overlay", height=320,
+             legend=dict(orientation="h", y=1.1, font=dict(size=10, color=DIM),
+                         bgcolor="rgba(0,0,0,0)"),
+             xaxis=dict(title="$k / month", gridcolor=BORDER, tickfont=dict(color=DIM)),
+             yaxis=dict(tickfont=dict(size=9, color=DIM)))
+        st.plotly_chart(fig_ra, use_container_width=True)
 
-        st.markdown('<p class="panel-hdr" style="margin-top:1.25rem">Working Capital Positioning</p>', unsafe_allow_html=True)
-        df_sc = get_portfolio_df()
-        df_sc = df_sc[df_sc["Sector"].isin(selected_sectors)]
-        fig_sc = px.scatter(
-            df_sc, x="DSO (days)", y="DPO (days)",
-            size="Trade Volume ($M)", color="Sector",
-            hover_name="Client", size_max=28,
-        )
-        dark(fig_sc, height=270,
-             xaxis=dict(gridcolor=BORDER, tickfont=dict(color=DIM)),
-             yaxis=dict(gridcolor=BORDER, tickfont=dict(color=DIM)),
-             legend=dict(font=dict(size=10, color=DIM), bgcolor="rgba(0,0,0,0)"))
-        st.plotly_chart(fig_sc, use_container_width=True)
+        st.markdown('<p class="phdr" style="margin-top:1rem">Open Cases · Stakeholder Mobilisation</p>',
+                    unsafe_allow_html=True)
+        open_cases = [
+            c for c in data.CASES
+            if c["status"] != "Resolved"
+            and c["program_id"] in {p["program_id"] for p in programs_f}
+        ]
+        open_cases.sort(key=lambda c: (c["priority"] != "High", -c["age_days"]))
+        for c in open_cases[:7]:
+            breach = c["age_days"] > c["sla_days"]
+            sla_html = (f"<span style='color:#ff6b78'>SLA +{c['age_days']-c['sla_days']}d</span>"
+                        if breach else
+                        f"<span style='color:{DIM}'>{c['age_days']}/{c['sla_days']}d</span>")
+            st.markdown(
+                f"<span class='flag'><b>{c['client_name']}</b> — {c['type']}<br>"
+                f"→ {c['owner_team']} · {c['status']} · {c['priority']} · {sla_html}</span>",
+                unsafe_allow_html=True,
+            )
+            st.markdown("<hr style='margin:5px 0'>", unsafe_allow_html=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 2 — Opportunity Pipeline
+# TAB 2 — CROSS-SELL PIPELINE
 # ══════════════════════════════════════════════════════════════════════════════
-with tab_pipe:
-    st.markdown('<p class="eyebrow">Cross-Sell Opportunity Pipeline · Ranked by Score</p>', unsafe_allow_html=True)
+with tab2:
+    opps = engine.get_all_opportunities(clients_f, min_score=min_score)
+    opps = [o for o in opps if o["line"] in lines]
+
+    k1, k2, k3, k4 = st.columns(4, gap="medium")
+    k1.markdown(kpi_html("Opportunities", len(opps)), unsafe_allow_html=True)
+    k2.markdown(kpi_html("Total EV / mo",
+                          f"${sum(o['expected_value_k'] for o in opps)/1000:.1f}M"),
+                unsafe_allow_html=True)
+    k3.markdown(kpi_html("High Priority",
+                          str(sum(1 for o in opps if o["label"] == "High"))),
+                unsafe_allow_html=True)
+    avg_prop = sum(o["propensity"] for o in opps) / max(len(opps), 1) * 100
+    k4.markdown(kpi_html("Avg Propensity", f"{avg_prop:.0f}%"), unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown('<p class="eye">Ranked by expected value · propensity × revenue · top-of-book first</p>',
+                unsafe_allow_html=True)
+
+    df_pipe = pd.DataFrame([{
+        "Client":        o["client_name"],
+        "Product":       o["product"],
+        "Line":          o["line"],
+        "Score":         o["score"],
+        "Priority":      o["label"],
+        "Propensity %":  round(o["propensity"] * 100),
+        "Rev $k/mo":     round(o["revenue_k_month"]),
+        "EV $k/mo":      round(o["expected_value_k"]),
+        "EV / effort":   o["ev_per_effort"],
+    } for o in opps])
+
+    def _color_priority(val):
+        if val == "High":   return "background-color:rgba(0,210,106,0.09);color:#00d26a;font-weight:700"
+        if val == "Medium": return "background-color:rgba(232,163,23,0.09);color:#E8A317;font-weight:700"
+        return "color:#555"
+
+    st.dataframe(
+        df_pipe.style.map(_color_priority, subset=["Priority"]),
+        use_container_width=True, height=320, hide_index=True,
+    )
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown('<p class="phdr">Top 5 — Explainable Score Waterfalls</p>', unsafe_allow_html=True)
+
+    for o in opps[:5]:
+        client_obj = data.get_client(o["client_id"])
+        bankers    = data.get_bankers_for_opportunity(client_obj, o["product"])
+        with st.expander(
+            f"{o['client_name']}  —  {o['product']}   "
+            f"[ {o['label']}  ·  score {o['score']}  ·  EV ${o['expected_value_k']:.0f}k/mo ]",
+        ):
+            wc1, wc2 = st.columns([3, 2])
+
+            labels   = [c[0] for c in o["components"]] + ["Total"]
+            vals     = [c[1] for c in o["components"]] + [0]
+            measures = ["relative"] * len(o["components"]) + ["total"]
+            wf = go.Figure(go.Waterfall(
+                orientation="v", measure=measures, x=labels, y=vals,
+                connector={"line": {"color": BORDER}},
+                increasing={"marker": {"color": RED}},
+                totals={"marker": {"color": INK}},
+            ))
+            dark(wf, height=260, yaxis_title="score pts",
+                 xaxis=dict(tickfont=dict(size=10, color=DIM), gridcolor=BORDER),
+                 yaxis=dict(gridcolor=BORDER, tickfont=dict(color=DIM)))
+            wc1.plotly_chart(wf, use_container_width=True)
+
+            rm_n, rm_t = bankers["rm"]
+            specs_str  = ", ".join(s[0] for s in bankers["specialists"])
+            wc2.markdown(
+                f"**Propensity (lookalike):** {o['propensity']*100:.0f}%  \n"
+                f"**Est. revenue:** ${o['revenue_k_month']:.0f}k/mo @ {o['margin_bps']}bps  \n"
+                f"**Expected value:** ${o['expected_value_k']:.0f}k/mo  \n"
+                f"**Effort:** ~{o['effort_days']} RM-days · EV/effort {o['ev_per_effort']}  \n\n"
+                f"**RM:** {rm_n} ({rm_t})  \n"
+                f"**Specialist:** {specs_str}  \n\n"
+                f"_{engine.recommended_action(o['label'])}_"
+            )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 3 — CLIENT DEEP DIVE
+# ══════════════════════════════════════════════════════════════════════════════
+with tab3:
+    st.markdown('<p class="eye">Client Deep Dive</p>', unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
 
-    if not filtered_opps:
-        st.info("No opportunities match current filters. Adjust the sidebar filters.")
-    else:
-        df_opps = pd.DataFrame([{
-            "Client":             o["client"],
-            "Type":               o.get("client_type", ""),
-            "Sector":             o["sector"],
-            "Product":            o["product"],
-            "Score":              o["score"],
-            "Priority":           score_label(o["score"]),
-            "Est. Revenue ($K)":  o["estimated_revenue_usd_k"],
-            "Relationship (yrs)": o["relationship_years"],
-        } for o in filtered_opps]).sort_values("Score", ascending=False)
-
-        def color_priority(val):
-            if val == "High":
-                return "background-color: rgba(0,210,106,0.10); color: #00d26a; font-weight: 700"
-            if val == "Medium":
-                return "background-color: rgba(245,158,11,0.10); color: #f59e0b; font-weight: 700"
-            return "color: #555"
-
-        styled = df_opps.style.map(color_priority, subset=["Priority"])
-        st.dataframe(styled, use_container_width=True, hide_index=True, height=420)
-
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown('<p class="panel-hdr">Top Priority Actions</p>', unsafe_allow_html=True)
-
-        top5 = [o for o in filtered_opps if o["score"] >= 70][:5] or filtered_opps[:3]
-
-        for opp in top5:
-            cd = next((c for c in CLIENTS if c["client"] == opp["client"]), None)
-            lbl = score_label(opp["score"])
-            with st.expander(
-                f"{opp['client']}   ·   {opp['product']}   ·   {opp['score']}/100   ·   ${opp['estimated_revenue_usd_k']:,}K",
-                expanded=False,
-            ):
-                st.markdown(badge(lbl) + "&nbsp;&nbsp;", unsafe_allow_html=True)
-                st.markdown("<br>", unsafe_allow_html=True)
-
-                m1, m2, m3 = st.columns(3)
-                m1.metric("Opportunity Score",   f"{opp['score']} / 100")
-                m2.metric("Est. Annual Revenue", f"${opp['estimated_revenue_usd_k']:,}K")
-                m3.metric("Relationship",        f"{opp['relationship_years']} yrs")
-                st.markdown("<br>", unsafe_allow_html=True)
-
-                if cd:
-                    bankers = get_bankers_for_opportunity(cd, opp["product"])
-                    b1, b2 = st.columns(2)
-                    rm_n, rm_t = bankers["rm"]
-                    b1.markdown(banker_card("Relationship Manager", rm_n, rm_t), unsafe_allow_html=True)
-                    if bankers["specialists"]:
-                        sn, st_ = bankers["specialists"][0]
-                        b2.markdown(banker_card("Product Specialist", sn, st_), unsafe_allow_html=True)
-
-                st.markdown("**Why this opportunity**")
-                for pt in opp["rationale"]:
-                    st.markdown(f"- {pt}")
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# TAB 3 — Client Deep Dive
-# ══════════════════════════════════════════════════════════════════════════════
-with tab_client:
-    st.markdown('<p class="eyebrow">Client Deep Dive</p>', unsafe_allow_html=True)
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    client_names  = [c["client"] for c in filtered_clients]
-    selected_name = st.selectbox("Select client", client_names, label_visibility="collapsed")
-    client_data   = next(c for c in CLIENTS if c["client"] == selected_name)
-    scored        = analyze_client(client_data)
-
+    names       = {c["name"]: c["id"] for c in data.CLIENTS}
+    default_idx = 0
+    if st.session_state.focus_client:
+        fc = data.get_client(st.session_state.focus_client)
+        if fc and fc["name"] in names:
+            default_idx = list(names.keys()).index(fc["name"])
+    sel_name = st.selectbox("Client", list(names.keys()), index=default_idx,
+                             label_visibility="collapsed")
+    c        = data.get_client(names[sel_name])
     st.markdown("<br>", unsafe_allow_html=True)
 
     # Info strip
-    corridors_html = "".join(f'<span class="ctag">{g}</span>' for g in client_data["trade_geographies"])
+    corridors_html = "".join(f'<span class="ctag">{g}</span>' for g in c["trade_corridors"])
     st.markdown(f"""
 <div class="istrip">
-  <div style="font-size:1.1rem;font-weight:700;color:#f0f0f0;margin-bottom:0.7rem">
-    {client_data['client']}
-    <span style="font-size:0.75rem;font-weight:400;color:#555;margin-left:12px">{client_data['client_type']}</span>
+  <div style="font-size:1.1rem;font-weight:700;color:{INK};margin-bottom:0.65rem">
+    {c['name']}
+    <span style="font-size:0.75rem;font-weight:400;color:{DIM};margin-left:12px">{c['client_type']}</span>
   </div>
   <div class="irow">
-    <div class="iitem"><span class="ilbl">Sector</span><span class="ival">{client_data['sector']}</span></div>
-    <div class="iitem"><span class="ilbl">HQ</span><span class="ival">{client_data['hq']}</span></div>
-    <div class="iitem"><span class="ilbl">Relationship</span><span class="ival">{client_data['relationship_years']} yrs</span></div>
-    <div class="iitem"><span class="ilbl">Revenue</span><span class="ival">${client_data['annual_revenue_usd_m']}M</span></div>
-    <div class="iitem"><span class="ilbl">Trade Volume</span><span class="ival">${client_data['trade_volume_usd_m']}M</span></div>
-    <div class="iitem"><span class="ilbl">DSO</span><span class="ival">{client_data['dso_days']}d</span></div>
-    <div class="iitem"><span class="ilbl">DPO</span><span class="ival">{client_data['dpo_days']}d</span></div>
-    <div class="iitem"><span class="ilbl">Suppliers</span><span class="ival">{client_data['supplier_count']:,}</span></div>
-    <div class="iitem"><span class="ilbl">Geographies</span><span class="ival">{len(client_data['trade_geographies'])}</span></div>
+    <div class="ii"><span class="ilbl">Sector</span><span class="ival">{c['sector']}</span></div>
+    <div class="ii"><span class="ilbl">Segment</span><span class="ival">{c['segment']}</span></div>
+    <div class="ii"><span class="ilbl">HQ</span><span class="ival">{c['hq']}</span></div>
+    <div class="ii"><span class="ilbl">Revenue</span><span class="ival">${c['revenue_usd_m']/1000:.1f}B</span></div>
+    <div class="ii"><span class="ilbl">Trade Volume</span><span class="ival">${c['trade_volume_usd_m']/1000:.1f}B</span></div>
+    <div class="ii"><span class="ilbl">DSO</span><span class="ival">{c['dso']}d</span></div>
+    <div class="ii"><span class="ilbl">DPO</span><span class="ival">{c['dpo']}d</span></div>
+    <div class="ii"><span class="ilbl">Suppliers</span><span class="ival">{c['supplier_count']:,}</span></div>
+    <div class="ii"><span class="ilbl">Relationship</span><span class="ival">{c['relationship_years']} yrs</span></div>
   </div>
-  <div style="margin-top:0.8rem">{corridors_html}</div>
+  <div style="margin-top:0.75rem">{corridors_html}</div>
 </div>
 """, unsafe_allow_html=True)
 
-    col_cov, col_chart = st.columns([2, 3], gap="large")
+    col_a, col_b = st.columns([3, 2], gap="large")
 
-    with col_cov:
-        st.markdown('<p class="panel-hdr">Product Coverage</p>', unsafe_allow_html=True)
-        existing = client_data["current_products"]
-        for cat, prods in PRODUCT_CATEGORIES.items():
-            st.markdown(f'<p class="eyebrow" style="margin-top:0.9rem">{cat}</p>', unsafe_allow_html=True)
-            pills = ""
-            for p in prods:
-                short = p.split(" - ", 1)[-1] if " - " in p else p
-                cls   = "pp-on" if p in existing else "pp-off"
-                dot   = "●" if p in existing else "○"
-                pills += f'<span class="ppill {cls}">{dot}&nbsp;{short}</span>'
-            st.markdown(f'<div style="display:flex;flex-wrap:wrap;gap:2px;margin-bottom:0.3rem">{pills}</div>', unsafe_allow_html=True)
+    # Live programs + gauge
+    with col_a:
+        st.markdown('<p class="phdr">Live Structured Programs</p>', unsafe_allow_html=True)
+        cps = data.get_programs_for_client(c["id"])
+        if not cps:
+            st.caption("No structured RF/SCF programs on this client yet — see cross-sell below.")
+        for p in cps:
+            h    = engine.program_health(p)
+            util = p["utilization"]
+            gauge_color = RED if util > 1 else (AMBER if util >= 0.9 else GREEN)
+            g = go.Figure(go.Indicator(
+                mode="gauge+number",
+                value=util * 100,
+                number={"suffix": "%", "font": {"color": INK, "size": 20}},
+                gauge={
+                    "axis": {"range": [0, 120], "tickcolor": DIM, "tickfont": {"color": DIM}},
+                    "bar":  {"color": gauge_color},
+                    "steps": [
+                        {"range": [0, 90],   "color": "#1c1c1c"},
+                        {"range": [90, 100], "color": "#332700"},
+                        {"range": [100, 120],"color": "#330306"},
+                    ],
+                    "threshold": {"line": {"color": RED, "width": 2}, "value": 100},
+                },
+                title={"text": f"{p['type']} {p['program_id']} · ${p['drawn_usd_m']:.0f}M / ${p['limit_usd_m']:.0f}M",
+                       "font": {"size": 11, "color": DIM}},
+            ))
+            g.update_layout(height=190, margin=dict(l=12, r=12, t=36, b=0),
+                            paper_bgcolor="rgba(0,0,0,0)", font_color=INK)
+            st.plotly_chart(g, use_container_width=True)
 
-    with col_chart:
-        st.markdown('<p class="panel-hdr">Cross-Sell Opportunity Scores</p>', unsafe_allow_html=True)
-        df_sc2 = pd.DataFrame([{
-            "Product":  s["product"],
-            "Score":    s["score"],
-            "Category": product_category(s["product"]),
-            "Status":   "Enrolled" if s["already_enrolled"] else score_label(s["score"]),
-        } for s in scored]).sort_values("Score")
+            flag_html = " ".join(
+                f"<span class='flag'>· {lbl}: {det}</span>"
+                for lbl, det, _ in h["flags"]
+            )
+            st.markdown(verdict_pill(h["verdict"]) + " " + flag_html, unsafe_allow_html=True)
 
-        cmap = {"Enrolled": "#2a2a2a", "High": RED, "Medium": AMBER, "Low": "#303030"}
-        fig_opp = px.bar(
-            df_sc2, x="Score", y="Product", orientation="h",
-            color="Status", color_discrete_map=cmap,
-            category_orders={"Status": ["Enrolled", "Low", "Medium", "High"]},
+            # Supplier funnel for SCF
+            if p["type"] == "SCF":
+                sup = data.get_suppliers_for_program(p["program_id"])
+                if sup:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    st.markdown('<p class="eye">Supplier onboarding funnel</p>', unsafe_allow_html=True)
+                    funnel = go.Figure(go.Funnel(
+                        y=["Invited", "KYC in progress", "Onboarded", "Actively discounting"],
+                        x=[sup["invited"], sup["kyc_in_progress"],
+                           sup["onboarded"], sup["actively_discounting"]],
+                        marker={"color": [BORDER, DIM, AMBER, GREEN]},
+                        textposition="inside",
+                        textinfo="value+percent initial",
+                    ))
+                    dark(funnel, height=200, margin=dict(l=0, r=0, t=4, b=0),
+                         font=dict(color=INK, size=11))
+                    st.plotly_chart(funnel, use_container_width=True)
+
+            st.markdown("<hr style='margin:10px 0'>", unsafe_allow_html=True)
+
+    # Cross-sell EV chart + AI brief
+    with col_b:
+        st.markdown('<p class="phdr">Cross-Sell EV by Product</p>', unsafe_allow_html=True)
+        client_opps = engine.analyze_client(c)[:10]
+        bar_df = pd.DataFrame([{
+            "Product":  o["product"], "EV": o["expected_value_k"], "Priority": o["label"]
+        } for o in client_opps])
+        fig_bar = px.bar(
+            bar_df, x="EV", y="Product", orientation="h", color="Priority",
+            color_discrete_map={"High": RED, "Medium": AMBER, "Low": "#2a2a2a"},
         )
-        dark(fig_opp, height=500,
-             xaxis=dict(range=[0, 100], title="Score", gridcolor=BORDER, tickfont=dict(color=DIM)),
-             yaxis=dict(tickfont=dict(size=9, color=DIM), gridcolor="rgba(0,0,0,0)"),
-             legend=dict(title="Priority", font=dict(size=10, color=DIM), bgcolor="rgba(0,0,0,0)"))
-        st.plotly_chart(fig_opp, use_container_width=True)
+        dark(fig_bar, height=340,
+             xaxis=dict(title="EV $k/mo", gridcolor=BORDER, tickfont=dict(color=DIM)),
+             yaxis=dict(tickfont=dict(size=9, color=DIM), autorange="reversed",
+                        gridcolor="rgba(0,0,0,0)"),
+             showlegend=False)
+        st.plotly_chart(fig_bar, use_container_width=True)
 
+        st.markdown('<p class="phdr" style="margin-top:1rem">AI Call Brief</p>',
+                    unsafe_allow_html=True)
+        st.caption("Generate RM-ready talking points from this client's profile.")
+        if st.button("Generate call brief", key="aibrief"):
+            with st.spinner("Drafting brief..."):
+                st.session_state["brief_text"]   = generate_brief(c, client_opps)
+                st.session_state["brief_prompt"] = build_brief_prompt(c, client_opps)
+        if st.session_state.get("brief_text"):
+            st.markdown(st.session_state["brief_text"])
+            with st.expander("View prompt sent to model"):
+                st.code(st.session_state["brief_prompt"], language="text")
+
+    # Call brief detail (full-width)
     st.divider()
+    st.markdown('<p class="phdr">Call Brief — Top Opportunities</p>', unsafe_allow_html=True)
+    st.caption("Expand any row to see the rationale and bankers to loop in")
 
-    # Call Brief
-    st.markdown('<p class="panel-hdr">Call Brief — Top Opportunities</p>', unsafe_allow_html=True)
-    st.caption("Expand any row to see rationale and the bankers to loop in")
-
-    new_opps = sorted(
-        [s for s in scored if not s["already_enrolled"] and s["score"] >= 40],
-        key=lambda x: x["score"], reverse=True
+    call_opps = sorted(
+        [o for o in engine.analyze_client(c) if o["score"] >= min_score],
+        key=lambda x: x["expected_value_k"], reverse=True,
     )
-
-    if not new_opps:
-        st.info("This client is fully enrolled or no high-confidence opportunities exist above the threshold.")
+    if not call_opps:
+        st.info("No opportunities above the score threshold for this client.")
     else:
-        for opp in new_opps[:8]:
-            lbl = score_label(opp["score"])
+        for opp in call_opps[:8]:
+            lbl = opp["label"]
             with st.expander(
-                f"{opp['product']}   ·   {opp['score']}/100   ·   ${opp['estimated_revenue_usd_k']:,}K   ·   {lbl}",
+                f"{opp['product']}   ·   {opp['score']}/100   ·   EV ${opp['expected_value_k']:.0f}k/mo   ·   {lbl}",
                 expanded=opp["score"] >= 70,
             ):
-                bankers = get_bankers_for_opportunity(client_data, opp["product"])
-                b_col, r_col = st.columns(2)
-
+                bankers = data.get_bankers_for_opportunity(c, opp["product"])
+                b1, b2  = st.columns(2)
                 rm_n, rm_t = bankers["rm"]
-                b_col.markdown(banker_card("Relationship Manager", rm_n, rm_t), unsafe_allow_html=True)
-
+                b1.markdown(banker_card("Relationship Manager", rm_n, rm_t), unsafe_allow_html=True)
                 for sn, st_ in bankers["specialists"][:2]:
-                    r_col.markdown(banker_card("Product Specialist", sn, st_), unsafe_allow_html=True)
+                    b2.markdown(banker_card("Product Specialist", sn, st_), unsafe_allow_html=True)
 
                 st.markdown("<br>", unsafe_allow_html=True)
-                st.markdown("**Why this opportunity**")
-                for pt in opp["rationale"]:
-                    st.markdown(f"- {pt}")
+                st.markdown(priority_badge(lbl), unsafe_allow_html=True)
+                st.markdown("&nbsp; **Why this opportunity**", unsafe_allow_html=True)
+                for lbl2, pts in opp["components"]:
+                    if lbl2 != "Base":
+                        st.markdown(f"- {lbl2} (+{pts} pts)")
 
                 if opp["score"] >= 70:
-                    st.success("Recommended action: Schedule intro with product specialist this quarter")
+                    st.success(f"Recommended action: {engine.recommended_action('High')}")
                 elif opp["score"] >= 40:
-                    st.warning("Recommended action: Qualify further in next relationship review")
+                    st.warning(f"Recommended action: {engine.recommended_action('Medium')}")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 4 — PORTFOLIO OVERVIEW
+# ══════════════════════════════════════════════════════════════════════════════
+with tab4:
+    tv      = sum(c["trade_volume_usd_m"] for c in clients_f)
+    all_opp = engine.get_all_opportunities(clients_f, min_score=0)
+    avg_enr = sum(len(c["enrolled"]) for c in clients_f) / max(len(clients_f), 1)
+
+    k1, k2, k3, k4 = st.columns(4, gap="medium")
+    k1.markdown(kpi_html("Clients in View",       str(len(clients_f))),     unsafe_allow_html=True)
+    k2.markdown(kpi_html("Total Trade Volume",    f"${tv/1000:.1f}B"),       unsafe_allow_html=True)
+    k3.markdown(kpi_html("Cross-Sell EV / mo",
+                          f"${sum(o['expected_value_k'] for o in all_opp)/1000:.1f}M"),
+                unsafe_allow_html=True)
+    k4.markdown(kpi_html("Avg Products / Client", f"{avg_enr:.1f}",
+                          f"of {len(data.PRODUCTS)}"), unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    o1, o2 = st.columns(2, gap="large")
+
+    with o1:
+        st.markdown('<p class="phdr">Working Capital Map · DSO vs DPO</p>', unsafe_allow_html=True)
+        wc_df = pd.DataFrame([{
+            "DSO": c["dso"], "DPO": c["dpo"],
+            "Trade Vol": c["trade_volume_usd_m"],
+            "Sector": c["sector"], "Client": c["name"],
+        } for c in clients_f])
+        fig_wc = px.scatter(
+            wc_df, x="DSO", y="DPO", size="Trade Vol",
+            color="Sector", hover_name="Client", size_max=28,
+        )
+        dark(fig_wc, height=420,
+             xaxis=dict(gridcolor=BORDER, tickfont=dict(color=DIM)),
+             yaxis=dict(gridcolor=BORDER, tickfont=dict(color=DIM)),
+             legend=dict(font=dict(size=10, color=DIM), bgcolor="rgba(0,0,0,0)"))
+        st.plotly_chart(fig_wc, use_container_width=True)
+
+    with o2:
+        st.markdown('<p class="phdr">Avg Cross-Sell EV by Product</p>', unsafe_allow_html=True)
+        from collections import defaultdict
+        agg = defaultdict(list)
+        for o in all_opp:
+            agg[o["product"]].append(o["expected_value_k"])
+        ev_df = pd.DataFrame([{
+            "Product": k, "Avg EV": round(sum(v) / len(v), 1)
+        } for k, v in agg.items()]).sort_values("Avg EV")
+        fig_ev = px.bar(ev_df, x="Avg EV", y="Product", orientation="h")
+        fig_ev.update_traces(marker_color=RED)
+        dark(fig_ev, height=420,
+             xaxis=dict(title="EV $k/mo", gridcolor=BORDER, tickfont=dict(color=DIM)),
+             yaxis=dict(tickfont=dict(size=9, color=DIM), gridcolor="rgba(0,0,0,0)"))
+        st.plotly_chart(fig_ev, use_container_width=True)

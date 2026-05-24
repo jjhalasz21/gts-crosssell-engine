@@ -1,271 +1,336 @@
-"""Mock client portfolio — 100 US-based and international subsidiary clients."""
+"""
+data.py — Mock data for the GTS Structured Trade Program Cockpit.
+
+Reframed from a pure cross-sell book into a program-management data model,
+matching the Sales Program Manager (GTS) role: proactively managing live
+Structured Trade Finance programs (RF / SCF) for GNB and IMM clients,
+while still surfacing cross-sell expansion.
+
+Key entities:
+  CLIENTS     — the corporate book (GNB + IMM segmentation)
+  PRODUCTS    — 18 GTS products across 5 business lines
+  PROGRAMS    — live structured trade facilities per client
+  SUPPLIERS   — supplier onboarding funnel for each SCF program
+  CASES       — open issues requiring stakeholder mobilisation
+  RELATIONSHIP_MANAGERS / PRODUCT_SPECIALISTS — the internal cast
+"""
 
 import random
-import pandas as pd
+from datetime import date, timedelta
 
-random.seed(42)
+SEED  = 42
+AS_OF = date(2026, 5, 24)   # single source of truth for "today"
 
-# ── Banker rosters ─────────────────────────────────────────────────────────────
-# Relationship Managers by sector coverage
+# ── Reference data ─────────────────────────────────────────────────────────────
+
+SECTORS = [
+    "Industrials", "Consumer Goods", "Technology", "Healthcare", "Energy",
+    "Automotive", "Retail", "Chemicals", "Aerospace & Defense",
+    "Metals & Mining", "Telecom", "Food & Beverage", "Pharmaceuticals",
+]
+
+SEGMENTS = ["GNB", "IMM"]   # Global Network Banking, International Middle Market
+
+HQ_COUNTRIES_INTL = [
+    "Germany", "Japan", "United Kingdom", "France", "South Korea",
+    "Netherlands", "Switzerland", "Canada", "Mexico", "Brazil",
+    "India", "Singapore", "Italy", "Sweden", "Spain",
+]
+US_STATES = ["NY", "NJ", "CT", "TX", "CA", "IL", "MA", "OH", "GA", "NC", "WA", "FL"]
+
+TRADE_CORRIDORS = [
+    "US-China", "US-EU", "US-Mexico", "US-Japan", "US-Korea", "US-India",
+    "US-Brazil", "US-UK", "US-Canada", "US-Vietnam", "US-Germany", "US-LatAm",
+]
+
+PRODUCTS = {
+    # Global Payments Solutions
+    "GPS Liquidity Management":     "GPS",
+    "GPS Cross-Border Payments":    "GPS",
+    "GPS Virtual Accounts":         "GPS",
+    "GPS Commercial Cards":         "GPS",
+    # Global Markets
+    "GM FX Spot & Forward":         "GM",
+    "GM FX Options":                "GM",
+    "GM Rates Hedging":             "GM",
+    # Global Trade Solutions — heart of this role
+    "GTS Receivables Finance":      "GTS",
+    "GTS Supply Chain Finance":     "GTS",
+    "GTS Documentary Credits":      "GTS",
+    "GTS Guarantees & SBLC":        "GTS",
+    "GTS Import/Export Loans":      "GTS",
+    "GTS Structured Trade Finance": "GTS",
+    # Lending
+    "Lending Revolving Credit":     "Lending",
+    "Lending Term Loan":            "Lending",
+    "Lending Asset-Based Lending":  "Lending",
+    # Investment Banking
+    "IB Debt Capital Markets":      "IB",
+    "IB M&A Advisory":              "IB",
+}
+
+BUSINESS_LINES = ["GPS", "GM", "GTS", "Lending", "IB"]
+
+STRUCTURED_PRODUCTS = ["GTS Receivables Finance", "GTS Supply Chain Finance"]
+
+# ── Internal bankers ───────────────────────────────────────────────────────────
+
 RELATIONSHIP_MANAGERS = {
-    "Food & Beverage":    [("Sarah Chen", "MD, CIB Coverage"), ("Michael Torres", "Director, CIB Coverage"), ("Priya Nair", "VP, CIB Coverage")],
-    "Agriculture":        [("James Whitfield", "MD, Agribusiness Coverage"), ("Laura Simmons", "Director, CIB Coverage")],
-    "Technology":         [("David Park", "MD, TMT Coverage"), ("Nina Patel", "Director, TMT Coverage"), ("Ryan Okafor", "VP, TMT Coverage")],
-    "Pharmaceuticals":    [("Catherine Lowe", "MD, Healthcare Coverage"), ("Marcus Webb", "Director, Healthcare Coverage")],
-    "Energy":             [("Robert Haines", "MD, Energy Coverage"), ("Alicia Moreno", "Director, Energy Coverage"), ("Tom Lindqvist", "VP, Natural Resources")],
-    "Chemicals":          [("George Stafford", "MD, Industrials Coverage"), ("Angela Kim", "Director, Chemicals Coverage")],
-    "Manufacturing":      [("Philip Osei", "MD, Industrials Coverage"), ("Hannah Bryce", "Director, Manufacturing Coverage"), ("Stefan Nowak", "VP, Industrials Coverage")],
-    "Retail":             [("Jessica Flynn", "MD, Consumer Coverage"), ("Carlos Espinoza", "Director, Consumer Coverage")],
-    "Construction":       [("Andrew MacPherson", "MD, Infrastructure Coverage"), ("Mei Lin", "Director, Construction Coverage")],
-    "Apparel":            [("Olivia Grant", "MD, Consumer Coverage"), ("Kevin Chandra", "Director, Retail Coverage")],
-    "Mining":             [("Samuel Obi", "MD, Natural Resources Coverage"), ("Rachel Thorpe", "Director, Mining Coverage")],
-    "Infrastructure":     [("Brian Kowalski", "MD, Infrastructure Coverage"), ("Fatima Al-Rashid", "Director, Infrastructure Coverage")],
-    "Financial Services": [("William Hargreaves", "MD, FIG Coverage"), ("Diane Cho", "Director, FIG Coverage")],
+    "Industrials":         [("Priya Raman", "Senior RM, GNB"), ("Tom Fletcher", "RM, IMM"), ("Lena Vogt", "RM, GNB")],
+    "Consumer Goods":      [("Marco Bianchi", "Senior RM, GNB"), ("Dana Cho", "RM, IMM"), ("Will Hartley", "RM, GNB")],
+    "Technology":          [("Aisha Khan", "Senior RM, IMM"), ("Ben Ortiz", "RM, GNB"), ("Sara Lindqvist", "RM, IMM")],
+    "Healthcare":          [("Grace Mwangi", "Senior RM, GNB"), ("Paolo Russo", "RM, IMM"), ("Henry Wu", "RM, GNB")],
+    "Energy":              [("Olu Adeyemi", "Senior RM, GNB"), ("Kate Sullivan", "RM, IMM"), ("Dmitri Volkov", "RM, GNB")],
+    "Automotive":          [("Yuki Tanaka", "Senior RM, GNB"), ("Erik Brandt", "RM, IMM"), ("Nadia Haddad", "RM, GNB")],
+    "Retail":              [("Sophie Laurent", "Senior RM, IMM"), ("Raj Malhotra", "RM, GNB"), ("Tessa Boone", "RM, IMM")],
+    "Chemicals":           [("Hans Becker", "Senior RM, GNB"), ("Ivy Chen", "RM, IMM"), ("Pablo Mendez", "RM, GNB")],
+    "Aerospace & Defense": [("Claire Dubois", "Senior RM, GNB"), ("Sam Whitaker", "RM, IMM"), ("Mei Ling", "RM, GNB")],
+    "Metals & Mining":     [("Diego Castro", "Senior RM, GNB"), ("Anna Kowalski", "RM, IMM"), ("Joel Fischer", "RM, GNB")],
+    "Telecom":             [("Farah Nasser", "Senior RM, IMM"), ("Greg Olsen", "RM, GNB"), ("Lucia Rossi", "RM, IMM")],
+    "Food & Beverage":     [("Tomas Berg", "Senior RM, GNB"), ("Hana Park", "RM, IMM"), ("Owen Reilly", "RM, GNB")],
+    "Pharmaceuticals":     [("Nina Petrova", "Senior RM, GNB"), ("Carlos Vega", "RM, IMM"), ("Amara Singh", "RM, GNB")],
 }
 
-# Product Specialists by product line
 PRODUCT_SPECIALISTS = {
-    "GPS - Current Accounts":       [("Jonathan Reeves", "MD, GPS Sales"), ("Amara Diallo", "Director, Transaction Banking Sales")],
-    "GPS - Savings & Deposits":     [("Jonathan Reeves", "MD, GPS Sales"), ("Sophie Eriksson", "VP, Deposits & Liquidity Sales")],
-    "GPS - Term Deposits":          [("Sophie Eriksson", "VP, Deposits & Liquidity Sales"), ("Jonathan Reeves", "MD, GPS Sales")],
-    "GPS - Liquidity & Channel":    [("Maya Goldstein", "MD, Liquidity Solutions"), ("Jonathan Reeves", "MD, GPS Sales")],
-    "GPS - International Payments": [("Diego Ramirez", "MD, Payments Sales"), ("Amara Diallo", "Director, Transaction Banking Sales")],
-    "GPS - Domestic Payments":      [("Diego Ramirez", "MD, Payments Sales"), ("Lena Hoffmann", "VP, Payments Solutions")],
-    "GPS - Cards":                  [("Fiona MacLeod", "Director, Commercial Cards"), ("Diego Ramirez", "MD, Payments Sales")],
-    "GM - Forex - Cash":            [("Alexander Novak", "MD, FX Sales"), ("Chloe Beaumont", "Director, FX Structuring"), ("Patrick Daly", "VP, FX Sales")],
-    "GM - FOREX - TFX":             [("Patrick Daly", "VP, FX Sales"), ("Alexander Novak", "MD, FX Sales")],
-    "GM - Futures":                 [("Raj Krishnamurthy", "MD, Commodities & Derivatives"), ("Isabelle Fontaine", "Director, Structured Derivatives")],
-    "GTS - Supply Chain Solutions": [("Trevor Blake", "MD, GTS Sales"), ("Yuki Tanaka", "Director, Supply Chain Finance"), ("Claudia Vega", "VP, GTS Sales")],
-    "GTS - Receivables Finance":    [("Trevor Blake", "MD, GTS Sales"), ("Omar Hassan", "Director, Receivables Finance"), ("Claudia Vega", "VP, GTS Sales")],
-    "GTS - Documentary Trade":      [("Sandra Petrov", "MD, Documentary Trade"), ("Yuki Tanaka", "Director, Supply Chain Finance")],
-    "GTS - Trade Loans":            [("Trevor Blake", "MD, GTS Sales"), ("Sandra Petrov", "MD, Documentary Trade"), ("Omar Hassan", "Director, Receivables Finance")],
-    "GTS - Guarantees":             [("Sandra Petrov", "MD, Documentary Trade"), ("Claudia Vega", "VP, GTS Sales")],
-    "GTS - CSTF":                   [("Nathaniel Cross", "MD, Commodity-Structured Trade"), ("Raj Krishnamurthy", "MD, Commodities & Derivatives")],
-    "Lending - Corporate Lending":  [("Eleanor Hayes", "MD, Corporate Lending"), ("Marcus Webb", "Director, Healthcare Coverage"), ("Philip Osei", "MD, Industrials Coverage")],
-    "IB - DCM IG":                  [("Victoria Sterling", "MD, DCM"), ("Harrison Cole", "Director, Debt Capital Markets"), ("Isabelle Fontaine", "Director, Structured Derivatives")],
+    "GPS Liquidity Management":     [("Ravi Iyer", "GPS Liquidity Specialist")],
+    "GPS Cross-Border Payments":    [("Mona Eltahir", "GPS Payments Specialist")],
+    "GPS Virtual Accounts":         [("Derek Lin", "GPS VA Specialist")],
+    "GPS Commercial Cards":         [("Cara Nolan", "Commercial Cards Specialist")],
+    "GM FX Spot & Forward":         [("Sven Larsson", "FX Sales"), ("Bianca Moretti", "FX Sales")],
+    "GM FX Options":                [("Sven Larsson", "FX Sales"), ("Hugo Bernard", "FX Derivatives")],
+    "GM Rates Hedging":             [("Hugo Bernard", "Rates Sales")],
+    "GTS Receivables Finance":      [("Elena Costa", "RF Specialist"), ("Marcus Bell", "Structured Trade")],
+    "GTS Supply Chain Finance":     [("Marcus Bell", "Structured Trade"), ("Priscilla Wong", "SCF Specialist")],
+    "GTS Documentary Credits":      [("Ahmed Saleh", "Trade Products")],
+    "GTS Guarantees & SBLC":        [("Ahmed Saleh", "Trade Products"), ("Julia Ferreira", "Guarantees Specialist")],
+    "GTS Import/Export Loans":      [("Kevin Tan", "Trade Finance")],
+    "GTS Structured Trade Finance": [("Marcus Bell", "Structured Trade"), ("Elena Costa", "RF Specialist")],
+    "Lending Revolving Credit":     [("Robert Frye", "Corporate Lending")],
+    "Lending Term Loan":            [("Robert Frye", "Corporate Lending")],
+    "Lending Asset-Based Lending":  [("Maria Santos", "ABL Specialist")],
+    "IB Debt Capital Markets":      [("James Whitlock", "DCM Origination")],
+    "IB M&A Advisory":              [("Charlotte Ng", "M&A Advisory")],
 }
 
-GTS_PRODUCTS = [
-    "GPS - Current Accounts",
-    "GPS - Savings & Deposits",
-    "GPS - Term Deposits",
-    "GPS - Liquidity & Channel",
-    "GPS - International Payments",
-    "GPS - Domestic Payments",
-    "GPS - Cards",
-    "GM - Forex - Cash",
-    "GM - FOREX - TFX",
-    "GM - Futures",
-    "GTS - Supply Chain Solutions",
-    "GTS - Receivables Finance",
-    "GTS - Documentary Trade",
-    "GTS - Trade Loans",
-    "GTS - Guarantees",
-    "GTS - CSTF",
-    "Lending - Corporate Lending",
-    "IB - DCM IG",
+INTERNAL_TEAMS = [
+    "GTS Operations", "Implementation", "Finance / Revenue Control",
+    "Credit Risk", "CIB Coverage", "Supplier Engagement", "Product",
 ]
 
-PRODUCT_CATEGORIES = {
-    "GPS": [p for p in GTS_PRODUCTS if p.startswith("GPS")],
-    "GM": [p for p in GTS_PRODUCTS if p.startswith("GM")],
-    "GTS": [p for p in GTS_PRODUCTS if p.startswith("GTS")],
-    "Lending": [p for p in GTS_PRODUCTS if p.startswith("Lending")],
-    "IB": [p for p in GTS_PRODUCTS if p.startswith("IB")],
-}
-
-# ── US Domestic corporates ─────────────────────────────────────────────────────
-US_CLIENTS_RAW = [
-    # Food & Beverage
-    ("Heartland Foods Group", "Food & Beverage", "Chicago, IL", ["USA", "Canada", "Mexico"], 1800, 820, 68, 42, 580, False, True, False),
-    ("Prairie Grain Co.", "Food & Beverage", "Kansas City, MO", ["USA", "China", "Japan", "EU"], 3200, 2100, 88, 38, 720, True, False, True),
-    ("Southern Beverage Corp", "Food & Beverage", "Atlanta, GA", ["USA", "Canada", "Caribbean"], 950, 410, 52, 31, 310, False, False, True),
-    ("Great Lakes Dairy", "Food & Beverage", "Detroit, MI", ["USA", "Canada"], 620, 180, 44, 29, 140, False, False, True),
-    ("Pacific Coast Seafood", "Food & Beverage", "Seattle, WA", ["USA", "Japan", "China", "South Korea"], 740, 590, 91, 22, 85, True, False, True),
-    ("Texas Cattle Holdings", "Food & Beverage", "Dallas, TX", ["USA", "Mexico", "Japan", "South Korea"], 2400, 1380, 77, 44, 420, True, False, True),
-    ("Sunshine Organics", "Food & Beverage", "San Francisco, CA", ["USA", "Canada", "EU"], 310, 140, 58, 35, 190, True, False, False),
-    # Agriculture
-    ("Midwest Agri Partners", "Agriculture", "Des Moines, IA", ["USA", "China", "Brazil", "EU"], 4100, 2900, 94, 47, 890, True, False, True),
-    ("Delta Cotton Corp", "Agriculture", "Memphis, TN", ["USA", "China", "India", "Turkey"], 1650, 1240, 86, 39, 340, True, False, True),
-    ("Mountain States Grain", "Agriculture", "Denver, CO", ["USA", "Mexico", "Japan"], 890, 620, 72, 41, 260, True, False, True),
-    ("Appalachian Timber LLC", "Agriculture", "Charlotte, NC", ["USA", "China", "EU", "Canada"], 560, 410, 65, 33, 95, True, False, False),
-    # Technology
-    ("Silicon Valley Semiconductor", "Technology", "San Jose, CA", ["USA", "Taiwan", "South Korea", "Japan", "EU"], 6800, 3900, 78, 55, 180, True, False, True),
-    ("Midwest Tech Manufacturing", "Technology", "Columbus, OH", ["USA", "China", "Mexico", "Canada"], 1200, 740, 65, 43, 210, True, False, True),
-    ("Atlantic Software Systems", "Technology", "Boston, MA", ["USA", "EU", "Canada"], 980, 290, 71, 38, 95, True, False, False),
-    ("CloudEdge Networks", "Technology", "Austin, TX", ["USA", "EU", "Singapore", "Canada"], 540, 180, 59, 44, 65, True, False, False),
-    ("Phoenix Data Solutions", "Technology", "Phoenix, AZ", ["USA", "Canada", "Mexico"], 380, 110, 63, 48, 72, False, True, False),
-    # Pharmaceuticals
-    ("Northeast Pharma Group", "Pharmaceuticals", "New York, NY", ["USA", "EU", "Canada", "Japan"], 3400, 1100, 82, 68, 320, True, True, False),
-    ("Appalachian BioSciences", "Pharmaceuticals", "Raleigh, NC", ["USA", "EU", "China"], 890, 310, 74, 61, 145, True, True, False),
-    ("Southwest Medical Supply", "Pharmaceuticals", "Albuquerque, NM", ["USA", "Mexico", "Canada"], 420, 195, 57, 44, 230, False, True, False),
-    ("Great Plains Health Corp", "Pharmaceuticals", "Omaha, NE", ["USA", "Canada"], 610, 220, 66, 52, 185, False, True, False),
-    # Energy
-    ("Gulf Coast Energy Partners", "Energy", "Houston, TX", ["USA", "Canada", "Mexico", "Saudi Arabia"], 8200, 4100, 55, 61, 95, True, True, False),
-    ("Rocky Mountain Gas LLC", "Energy", "Denver, CO", ["USA", "Canada", "Mexico"], 3100, 1800, 48, 55, 75, True, True, False),
-    ("Appalachian Power Services", "Energy", "Pittsburgh, PA", ["USA", "Canada"], 1400, 680, 62, 47, 120, False, True, False),
-    ("Solar Horizon Corp", "Energy", "Phoenix, AZ", ["USA", "Germany", "China", "Japan"], 920, 510, 77, 38, 68, True, True, False),
-    ("Atlantic Offshore Energy", "Energy", "Norfolk, VA", ["USA", "EU", "Canada"], 1750, 890, 58, 54, 88, True, True, False),
-    # Chemicals
-    ("Great Lakes Chemical Co.", "Chemicals", "Cleveland, OH", ["USA", "Canada", "EU", "China"], 2100, 1340, 71, 58, 230, True, False, False),
-    ("Gulf Petrochem Corp", "Chemicals", "Baton Rouge, LA", ["USA", "Mexico", "Brazil", "EU"], 3600, 2200, 64, 62, 175, True, False, False),
-    ("Southwest Specialty Chem", "Chemicals", "Houston, TX", ["USA", "Mexico", "Canada"], 780, 490, 68, 51, 140, True, False, False),
-    ("Appalachian Industrial Chem", "Chemicals", "Charleston, WV", ["USA", "Canada", "EU"], 560, 370, 73, 49, 120, False, False, False),
-    # Manufacturing
-    ("Great Plains Auto Parts", "Manufacturing", "Detroit, MI", ["USA", "Mexico", "Canada", "China"], 2800, 1650, 69, 57, 480, True, False, True),
-    ("Southeast Aerospace Group", "Manufacturing", "Huntsville, AL", ["USA", "EU", "Canada"], 4200, 1900, 83, 72, 320, True, True, False),
-    ("Midwest Steel & Fabrication", "Manufacturing", "Gary, IN", ["USA", "Canada", "Mexico", "Brazil"], 1350, 920, 74, 63, 290, True, False, False),
-    ("Pacific Northwest Lumber", "Manufacturing", "Portland, OR", ["USA", "China", "Japan", "Canada"], 680, 540, 61, 35, 95, True, False, True),
-    ("Texas Industrial Machinery", "Manufacturing", "San Antonio, TX", ["USA", "Mexico", "Brazil", "Canada"], 1100, 730, 77, 54, 210, True, False, False),
-    ("Atlantic Shipbuilding Corp", "Manufacturing", "Baltimore, MD", ["USA", "EU", "Middle East"], 2100, 980, 91, 68, 185, True, True, False),
-    ("Rocky Mountain Mining Equipment", "Manufacturing", "Salt Lake City, UT", ["USA", "Canada", "Australia", "Chile"], 890, 620, 79, 55, 155, True, True, False),
-    # Retail
-    ("Mid-Atlantic Retail Group", "Retail", "Philadelphia, PA", ["USA", "Canada", "China"], 2200, 1400, 48, 31, 920, False, False, True),
-    ("Sunbelt Consumer Goods", "Retail", "Miami, FL", ["USA", "Latin America", "Canada"], 1650, 980, 52, 28, 740, False, False, True),
-    ("Pacific Rim Trading Co.", "Retail", "Los Angeles, CA", ["USA", "China", "Japan", "South Korea"], 3100, 2100, 57, 34, 1100, False, False, True),
-    ("Mountain West Wholesale", "Retail", "Las Vegas, NV", ["USA", "Canada", "Mexico"], 780, 510, 44, 26, 560, False, False, True),
-    # Construction & Infrastructure
-    ("Northeast Infrastructure Group", "Construction", "New York, NY", ["USA", "Canada", "EU"], 1900, 680, 102, 61, 420, False, True, False),
-    ("Gulf Coast Contractors", "Construction", "New Orleans, LA", ["USA", "Mexico", "Caribbean"], 820, 310, 95, 54, 310, False, True, False),
-    ("Southwest Civil Engineering", "Construction", "Las Vegas, NV", ["USA", "Mexico", "Canada"], 610, 240, 88, 57, 270, False, True, False),
-    ("Pacific Infrastructure Partners", "Construction", "Los Angeles, CA", ["USA", "Canada", "Japan"], 1400, 490, 97, 63, 350, False, True, False),
-    # Apparel & Textiles
-    ("New York Fashion Group", "Apparel", "New York, NY", ["USA", "China", "Bangladesh", "EU", "Vietnam"], 1100, 830, 79, 38, 680, True, False, True),
-    ("Southeast Textile Mills", "Apparel", "Greenville, SC", ["USA", "China", "India", "EU"], 490, 370, 71, 42, 420, True, False, True),
-    ("West Coast Sportswear", "Apparel", "Los Angeles, CA", ["USA", "China", "Vietnam", "Indonesia", "EU"], 870, 650, 74, 35, 780, True, False, True),
-    # Mining & Metals
-    ("Arizona Copper Mining", "Mining", "Tucson, AZ", ["USA", "China", "Japan", "EU"], 2100, 1650, 62, 58, 95, True, True, False),
-    ("Nevada Gold Corp", "Mining", "Reno, NV", ["USA", "EU", "Canada", "Australia"], 1800, 1240, 55, 61, 78, True, True, False),
-    ("Appalachian Coal Holdings", "Mining", "Lexington, KY", ["USA", "India", "EU", "Japan"], 940, 720, 68, 49, 62, True, True, False),
-    ("Great Plains Ethanol Corp", "Energy", "Sioux Falls, SD", ["USA", "Canada", "Brazil", "EU"], 580, 390, 61, 43, 75, True, False, True),
+CASE_TYPES = [
+    "Revenue recognition discrepancy",
+    "Limit / utilization breach query",
+    "Supplier onboarding delay",
+    "Documentary discrepancy",
+    "Program rollover / renewal",
+    "Pricing / margin query",
+    "Operational processing error",
+    "Reporting / MI request",
 ]
 
-# ── International Subsidiary clients in the US ────────────────────────────────
-INTL_CLIENTS_RAW = [
-    # German
-    ("Müller Automotive USA", "Manufacturing", "Detroit, MI", ["USA", "Germany", "Mexico", "China"], 3800, 2100, 61, 72, 420, True, False, True),
-    ("Bayer Healthcare Americas", "Pharmaceuticals", "Whippany, NJ", ["USA", "Germany", "EU", "Japan", "China"], 4200, 1300, 85, 78, 285, True, True, False),
-    ("BASF North America Corp", "Chemicals", "Florham Park, NJ", ["USA", "Germany", "Canada", "Mexico", "EU"], 5100, 2900, 69, 74, 310, True, False, False),
-    ("Siemens Energy Americas", "Energy", "Houston, TX", ["USA", "Germany", "EU", "Middle East"], 3600, 1700, 72, 68, 195, True, True, False),
-    ("Bosch Manufacturing USA", "Manufacturing", "Anderson, SC", ["USA", "Germany", "Mexico", "China", "India"], 2900, 1650, 65, 71, 380, True, False, True),
-    ("ThyssenKrupp Steel Americas", "Manufacturing", "Calvert, AL", ["USA", "Germany", "Brazil", "Canada"], 1800, 1380, 74, 69, 215, True, False, False),
-    ("Henkel Consumer Americas", "Chemicals", "Stamford, CT", ["USA", "Germany", "Canada", "Mexico", "EU"], 2100, 980, 66, 63, 240, True, False, True),
-    # Japanese
-    ("Toyota Motor North America", "Manufacturing", "Plano, TX", ["USA", "Japan", "Mexico", "Canada", "EU"], 18000, 8400, 58, 81, 640, True, False, True),
-    ("Sony Electronics Americas", "Technology", "San Diego, CA", ["USA", "Japan", "Mexico", "EU", "China"], 4800, 2200, 71, 68, 185, True, False, True),
-    ("Mitsubishi Chemical Americas", "Chemicals", "Alpharetta, GA", ["USA", "Japan", "EU", "China"], 2600, 1540, 68, 72, 195, True, False, False),
-    ("Sumitomo Corp of Americas", "Manufacturing", "New York, NY", ["USA", "Japan", "EU", "China", "Southeast Asia"], 6200, 3800, 75, 65, 310, True, False, False),
-    ("Hitachi Energy Americas", "Energy", "Raleigh, NC", ["USA", "Japan", "EU", "Canada"], 3100, 1450, 79, 63, 165, True, True, False),
-    ("Canon USA Inc", "Technology", "Melville, NY", ["USA", "Japan", "EU", "China"], 2400, 1100, 64, 61, 140, True, False, True),
-    ("Bridgestone Americas", "Manufacturing", "Nashville, TN", ["USA", "Japan", "Mexico", "Canada", "Brazil"], 4900, 2400, 62, 74, 380, True, False, True),
-    # British
-    ("BP North America Inc", "Energy", "Houston, TX", ["USA", "UK", "Canada", "Middle East", "Norway"], 22000, 11000, 44, 58, 88, True, True, False),
-    ("Rolls-Royce Americas", "Manufacturing", "Reston, VA", ["USA", "UK", "EU", "Canada"], 5800, 2100, 88, 75, 145, True, True, False),
-    ("AstraZeneca US Operations", "Pharmaceuticals", "Wilmington, DE", ["USA", "UK", "EU", "Japan", "China"], 7400, 2100, 91, 82, 220, True, True, False),
-    ("HSBC Global Banking Americas", "Financial Services", "New York, NY", ["USA", "UK", "EU", "Asia", "Latin America"], 0, 0, 0, 0, 0, True, False, False),
-    ("BAE Systems Inc", "Manufacturing", "Arlington, VA", ["USA", "UK", "EU", "Australia"], 6200, 2800, 94, 71, 195, True, True, False),
-    ("Diageo North America", "Food & Beverage", "Norwalk, CT", ["USA", "UK", "EU", "Caribbean", "Canada"], 3800, 1200, 57, 48, 280, True, False, True),
-    # French
-    ("Total Energies USA", "Energy", "Houston, TX", ["USA", "France", "EU", "Middle East", "Africa"], 14000, 7800, 47, 62, 95, True, True, False),
-    ("Airbus Americas Inc", "Manufacturing", "Mobile, AL", ["USA", "France", "EU", "Canada"], 8900, 3100, 96, 84, 165, True, True, False),
-    ("L'Oréal USA Inc", "Retail", "New York, NY", ["USA", "France", "EU", "China", "Canada"], 4200, 1350, 61, 52, 380, True, False, True),
-    ("Michelin North America", "Manufacturing", "Greenville, SC", ["USA", "France", "EU", "Canada", "Brazil"], 3600, 1900, 65, 69, 310, True, False, True),
-    ("Schneider Electric USA", "Manufacturing", "Boston, MA", ["USA", "France", "EU", "Mexico", "Canada"], 4800, 2200, 72, 67, 245, True, False, False),
-    # South Korean
-    ("Samsung Electronics America", "Technology", "Ridgefield Park, NJ", ["USA", "South Korea", "EU", "China", "Vietnam"], 9800, 4200, 74, 65, 210, True, False, True),
-    ("Hyundai Motor America", "Manufacturing", "Fountain Valley, CA", ["USA", "South Korea", "Mexico", "EU"], 12000, 5800, 62, 77, 420, True, False, True),
-    ("LG Electronics USA", "Technology", "Englewood Cliffs, NJ", ["USA", "South Korea", "EU", "China", "Mexico"], 5200, 2400, 68, 63, 185, True, False, True),
-    ("SK Innovation Americas", "Energy", "Atlanta, GA", ["USA", "South Korea", "EU", "China"], 3400, 1800, 71, 68, 145, True, False, False),
-    ("POSCO Americas Corp", "Manufacturing", "Songdo, GA", ["USA", "South Korea", "EU", "Australia", "Brazil"], 2800, 1950, 66, 72, 165, True, False, False),
-    # Chinese
-    ("Lenovo North America", "Technology", "Morrisville, NC", ["USA", "China", "EU", "Canada", "Latin America"], 6800, 3100, 77, 58, 175, True, False, True),
-    ("CNOOC USA Inc", "Energy", "Houston, TX", ["USA", "China", "Canada", "Australia"], 4200, 2800, 51, 61, 72, True, True, False),
-    ("Haier Americas", "Manufacturing", "Camden, SC", ["USA", "China", "EU", "Canada"], 2100, 980, 69, 54, 215, True, False, True),
-    # Canadian
-    ("Brookfield Asset Mgmt USA", "Infrastructure", "New York, NY", ["USA", "Canada", "EU", "Australia"], 8400, 2100, 88, 74, 135, False, True, False),
-    ("Bombardier Transportation", "Manufacturing", "Plattsburgh, NY", ["USA", "Canada", "EU", "Middle East"], 3200, 1450, 94, 79, 125, True, True, False),
-    ("Manulife US Operations", "Financial Services", "Boston, MA", ["USA", "Canada", "EU", "Asia"], 0, 0, 0, 0, 0, False, False, False),
-    # Dutch / Swiss
-    ("Shell USA Inc", "Energy", "Houston, TX", ["USA", "Netherlands", "EU", "Canada", "Middle East"], 19000, 9800, 43, 65, 92, True, True, False),
-    ("Philips North America", "Technology", "Andover, MA", ["USA", "Netherlands", "EU", "China", "Canada"], 3800, 1600, 73, 68, 185, True, False, False),
-    ("Nestlé USA Inc", "Food & Beverage", "Arlington, VA", ["USA", "Switzerland", "EU", "Canada", "Mexico"], 7200, 2100, 55, 49, 610, True, False, True),
-    ("Novartis Pharmaceuticals USA", "Pharmaceuticals", "East Hanover, NJ", ["USA", "Switzerland", "EU", "Japan", "China"], 8900, 2400, 88, 81, 275, True, True, False),
-    ("ABB Group North America", "Manufacturing", "Cary, NC", ["USA", "Switzerland", "EU", "Canada", "China"], 4100, 1850, 77, 71, 210, True, False, False),
-    ("Roche Diagnostics Corp", "Pharmaceuticals", "Indianapolis, IN", ["USA", "Switzerland", "EU", "Japan", "Canada"], 6200, 1800, 84, 77, 240, True, True, False),
-    # Indian
-    ("Tata Consultancy US", "Technology", "Edison, NJ", ["USA", "India", "EU", "Canada", "Australia"], 4800, 980, 82, 61, 165, True, False, False),
-    ("Infosys Americas", "Technology", "Raleigh, NC", ["USA", "India", "EU", "Canada", "Australia"], 3900, 740, 79, 57, 145, True, False, False),
-    ("Wipro Americas Inc", "Technology", "San Jose, CA", ["USA", "India", "EU", "Canada", "Middle East"], 2800, 510, 74, 53, 120, True, False, False),
-    # Swedish / Nordic
-    ("Volvo North America", "Manufacturing", "Greensboro, NC", ["USA", "Sweden", "EU", "Canada", "Mexico"], 5100, 2600, 71, 75, 285, True, False, True),
-    ("IKEA North America Services", "Retail", "Conshohocken, PA", ["USA", "Sweden", "EU", "China", "Canada"], 4400, 2100, 49, 62, 840, False, False, True),
-    ("Ericsson Inc (USA)", "Technology", "Plano, TX", ["USA", "Sweden", "EU", "Latin America", "Asia"], 3200, 1100, 77, 65, 150, True, False, False),
-    ("H&M Hennes & Mauritz USA", "Apparel", "New York, NY", ["USA", "Sweden", "EU", "China", "Bangladesh", "Vietnam"], 2800, 1950, 56, 41, 920, True, False, True),
-    ("Equinor US Operations", "Energy", "Stamford, CT", ["USA", "Norway", "EU", "Canada"], 9200, 5400, 46, 59, 85, True, True, False),
-    ("ABB Asea Brown Boveri", "Manufacturing", "Cary, NC", ["USA", "Switzerland", "EU", "China", "India"], 3200, 1450, 74, 68, 195, True, False, False),
-]
+# ── Client generation ──────────────────────────────────────────────────────────
 
-# Remove HSBC and financial services clients with zero trade (not applicable for GTS)
-INTL_CLIENTS_RAW = [c for c in INTL_CLIENTS_RAW if c[4] > 0]
+def _company_name(rng, sector, intl):
+    prefixes = {
+        "Industrials":         ["Vanguard", "Meridian", "Atlas", "Forge", "Pinnacle"],
+        "Consumer Goods":      ["Bright", "Harvest", "Nova", "Crest", "Lumen"],
+        "Technology":          ["Quantum", "Cipher", "Nimbus", "Vertex", "Helix"],
+        "Healthcare":          ["Vital", "Caelum", "Mercy", "Aevum", "Corpus"],
+        "Energy":              ["Helios", "Volta", "Terra", "Apex", "Orbis"],
+        "Automotive":          ["Axle", "Velos", "Drive", "Torque", "Caliber"],
+        "Retail":              ["Marketa", "Bazaar", "Trove", "Saleem", "Vista"],
+        "Chemicals":           ["Catalys", "Polymera", "Synth", "Bonded", "Ester"],
+        "Aerospace & Defense": ["Aero", "Skyforge", "Falcon", "Strato", "Aegis"],
+        "Metals & Mining":     ["Ferro", "Lode", "Granite", "Ore", "Smelt"],
+        "Telecom":             ["Connecta", "Pulse", "Wavelength", "Nexus", "Relay"],
+        "Food & Beverage":     ["Verde", "Pantry", "Brew", "Orchard", "Savor"],
+        "Pharmaceuticals":     ["Curo", "Pharos", "Remedy", "Genix", "Salus"],
+    }[sector]
+    suf_intl = ["GmbH", "K.K.", "S.A.", "Ltd", "B.V.", "AG", "S.p.A.", "PLC"]
+    suf_us   = ["Inc.", "LLC", "Corp.", "Holdings", "Group"]
+    stem     = rng.choice(prefixes) + rng.choice(["", "tech", "core", "works", "lab", "tron", "ix"])
+    suffix   = rng.choice(suf_intl if intl else suf_us)
+    tag      = " (US)" if intl else ""
+    return f"{stem.capitalize()} {suffix}{tag}"
 
 
-def _build_client(row, is_intl: bool) -> dict:
-    name, sector, hq, geos, rev, trade, dso, dpo, suppliers, fx, govt, seasonal = row
-    n_products = random.randint(1, 4)
-    eligible = [p for p in GTS_PRODUCTS]
-    current = random.sample(eligible, min(n_products, len(eligible)))
-    rm_pool = RELATIONSHIP_MANAGERS.get(sector, [("Alex Johnson", "MD, CIB Coverage")])
-    rm = rm_pool[random.randint(0, len(rm_pool) - 1)]
-    return {
-        "client": name,
-        "sector": sector,
-        "hq": hq,
-        "trade_geographies": geos,
-        "annual_revenue_usd_m": rev,
-        "trade_volume_usd_m": trade,
-        "dso_days": dso,
-        "dpo_days": dpo,
-        "supplier_count": suppliers,
-        "multi_currency": fx,
-        "government_contracts": govt,
-        "seasonal_trade": seasonal,
-        "current_products": current,
-        "relationship_years": random.randint(1, 12),
-        "client_type": "International Subsidiary" if is_intl else "US Domestic",
-        "relationship_manager": rm[0],
-        "rm_title": rm[1],
-    }
+def _build_clients():
+    rng     = random.Random(SEED)
+    clients = []
+    for i in range(100):
+        intl    = i < 49
+        segment = "GNB" if (intl and rng.random() < 0.8) or (not intl and rng.random() < 0.25) else "IMM"
+        sector  = rng.choice(SECTORS)
+        revenue = round(rng.choice([
+            rng.uniform(150, 800),
+            rng.uniform(800, 4000),
+            rng.uniform(4000, 18000),
+        ]), 1)
+        dso = rng.randint(28, 120)
+        dpo = rng.randint(25, 95)
+        client = {
+            "id":                 f"C{i+1:03d}",
+            "name":               _company_name(rng, sector, intl),
+            "sector":             sector,
+            "segment":            segment,
+            "client_type":        "International Subsidiary" if intl else "US Domestic",
+            "hq":                 rng.choice(HQ_COUNTRIES_INTL) if intl else f"{rng.choice(US_STATES)}, US",
+            "revenue_usd_m":      revenue,
+            "trade_volume_usd_m": round(revenue * rng.uniform(0.25, 0.75), 1),
+            "dso":                dso,
+            "dpo":                dpo,
+            "supplier_count":     rng.randint(40, 1200),
+            "trade_corridors":    rng.sample(TRADE_CORRIDORS, rng.randint(1, 4)),
+            "gov_contracts":      rng.random() < 0.18,
+            "relationship_years": rng.randint(1, 22),
+            "enrolled":           [],
+        }
+        n        = rng.randint(1, 4)
+        enrolled = set(rng.sample(list(PRODUCTS.keys()), n))
+        if rng.random() < 0.45:
+            enrolled.add(rng.choice(STRUCTURED_PRODUCTS))
+        client["enrolled"] = sorted(enrolled)
+        clients.append(client)
+    return clients
 
 
-def get_bankers_for_opportunity(client: dict, product: str) -> dict:
-    """Return RM and product specialist(s) for a given client + product."""
-    rm_pool = RELATIONSHIP_MANAGERS.get(client["sector"], [("Alex Johnson", "MD, CIB Coverage")])
-    rm = (client["relationship_manager"], client["rm_title"])
-    specialists = PRODUCT_SPECIALISTS.get(product, [("Trevor Blake", "MD, GTS Sales")])
-    return {"rm": rm, "specialists": specialists}
+CLIENTS = _build_clients()
 
 
-CLIENTS = (
-    [_build_client(r, False) for r in US_CLIENTS_RAW]
-    + [_build_client(r, True) for r in INTL_CLIENTS_RAW]
-)
+# ── Program generation ─────────────────────────────────────────────────────────
+
+def _build_programs(clients):
+    rng      = random.Random(SEED + 1)
+    programs = []
+    pid      = 0
+    for c in clients:
+        for product in STRUCTURED_PRODUCTS:
+            if product not in c["enrolled"]:
+                continue
+            pid      += 1
+            is_scf    = product == "GTS Supply Chain Finance"
+            limit     = round(c["trade_volume_usd_m"] * rng.uniform(0.15, 0.45), 1)
+            util_pct  = rng.uniform(0.25, 1.08)
+            drawn     = round(limit * util_pct, 1)
+            inception = AS_OF - timedelta(days=rng.randint(120, 1100))
+            tenor     = rng.choice([180, 270, 365, 540])
+            rollover  = inception + timedelta(days=tenor * rng.randint(1, 4))
+            while rollover < AS_OF:
+                rollover += timedelta(days=tenor)
+            margin_bps     = rng.randint(85, 320)
+            expected_rev_k = round(drawn * 1000 * (margin_bps / 10000) / 12, 1)
+            drift          = rng.uniform(-0.18, 0.06)
+            booked_rev_k   = round(expected_rev_k * (1 + drift), 1)
+            top_conc       = rng.uniform(0.12, 0.72)
+            programs.append({
+                "program_id":                f"PRG{pid:04d}",
+                "client_id":                 c["id"],
+                "client_name":               c["name"],
+                "product":                   product,
+                "type":                      "SCF" if is_scf else "RF",
+                "limit_usd_m":               limit,
+                "drawn_usd_m":               drawn,
+                "utilization":               round(util_pct, 3),
+                "inception":                 inception,
+                "rollover":                  rollover,
+                "days_to_rollover":          (rollover - AS_OF).days,
+                "tenor_days":                tenor,
+                "margin_bps":                margin_bps,
+                "expected_rev_k_month":      expected_rev_k,
+                "booked_rev_k_month":        booked_rev_k,
+                "rev_variance_k":            round(booked_rev_k - expected_rev_k, 1),
+                "rev_variance_pct":          round(drift, 3),
+                "top_obligor_concentration": round(top_conc, 3),
+                "dso": c["dso"],
+                "dpo": c["dpo"],
+            })
+    return programs
 
 
-def get_portfolio_df() -> pd.DataFrame:
-    rows = []
-    for c in CLIENTS:
-        rows.append({
-            "Client": c["client"],
-            "Type": c["client_type"],
-            "Sector": c["sector"],
-            "HQ": c["hq"],
-            "Revenue ($M)": c["annual_revenue_usd_m"],
-            "Trade Volume ($M)": c["trade_volume_usd_m"],
-            "DSO (days)": c["dso_days"],
-            "DPO (days)": c["dpo_days"],
-            "Suppliers": c["supplier_count"],
-            "Geographies": len(c["trade_geographies"]),
-            "Current Products": len(c["current_products"]),
-            "Relationship (yrs)": c["relationship_years"],
+PROGRAMS = _build_programs(CLIENTS)
+
+
+# ── Supplier funnel ────────────────────────────────────────────────────────────
+
+def _build_suppliers(programs):
+    rng       = random.Random(SEED + 2)
+    suppliers = []
+    for p in programs:
+        if p["type"] != "SCF":
+            continue
+        total        = rng.randint(12, 60)
+        kyc          = int(total * rng.uniform(0.55, 0.9))
+        onboarded    = int(kyc * rng.uniform(0.6, 0.95))
+        discounting  = int(onboarded * rng.uniform(0.5, 0.9))
+        suppliers.append({
+            "program_id":            p["program_id"],
+            "client_name":           p["client_name"],
+            "invited":               total,
+            "kyc_in_progress":       kyc,
+            "onboarded":             onboarded,
+            "actively_discounting":  discounting,
+            "stalled":               max(0, kyc - onboarded),
         })
-    return pd.DataFrame(rows)
+    return suppliers
+
+
+SUPPLIERS = _build_suppliers(PROGRAMS)
+
+
+# ── Cases ─────────────────────────────────────────────────────────────────────
+
+def _build_cases(programs):
+    rng   = random.Random(SEED + 3)
+    cases = []
+    cid   = 0
+    for p in programs:
+        trouble = (p["utilization"] > 1.0) or (p["rev_variance_pct"] < -0.1) \
+                  or (p["days_to_rollover"] < 30) or (p["top_obligor_concentration"] > 0.6)
+        n       = rng.randint(1, 2) if trouble else (1 if rng.random() < 0.25 else 0)
+        for _ in range(n):
+            cid    += 1
+            opened  = AS_OF - timedelta(days=rng.randint(0, 45))
+            status  = rng.choices(["Open", "In Progress", "Resolved"], weights=[0.35, 0.4, 0.25])[0]
+            prio    = rng.choices(["High", "Medium", "Low"], weights=[0.3, 0.45, 0.25])[0]
+            cases.append({
+                "case_id":     f"CASE{cid:04d}",
+                "program_id":  p["program_id"],
+                "client_name": p["client_name"],
+                "type":        rng.choice(CASE_TYPES),
+                "owner_team":  rng.choice(INTERNAL_TEAMS),
+                "status":      status,
+                "priority":    prio,
+                "opened":      opened,
+                "age_days":    (AS_OF - opened).days,
+                "sla_days":    rng.choice([3, 5, 10, 15]),
+            })
+    return cases
+
+
+CASES = _build_cases(PROGRAMS)
+
+
+# ── Lookups ────────────────────────────────────────────────────────────────────
+
+def get_client(client_id):
+    return next((c for c in CLIENTS if c["id"] == client_id), None)
+
+
+def get_programs_for_client(client_id):
+    return [p for p in PROGRAMS if p["client_id"] == client_id]
+
+
+def get_cases_for_program(program_id):
+    return [c for c in CASES if c["program_id"] == program_id]
+
+
+def get_suppliers_for_program(program_id):
+    return next((s for s in SUPPLIERS if s["program_id"] == program_id), None)
+
+
+def get_bankers_for_opportunity(client, product):
+    rms         = RELATIONSHIP_MANAGERS.get(client["sector"], [("Unassigned", "RM")])
+    rng         = random.Random(hash(client["id"]) & 0xFFFF)
+    rm          = rng.choice(rms)
+    specialists = PRODUCT_SPECIALISTS.get(product, [("Unassigned", "Specialist")])
+    return {"rm": rm, "specialists": specialists}
