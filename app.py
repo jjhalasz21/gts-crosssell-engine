@@ -190,6 +190,11 @@ html, body, [class*="css"] {{ font-family: 'IBM Plex Sans', system-ui, sans-seri
 /* ── Misc ─────────────────────────────────────────── */
 hr {{ border-color: #222 !important; margin: 1.5rem 0 !important; }}
 .block-container {{ padding: 1.5rem 2.5rem 4rem; max-width: 1500px; }}
+
+/* ── Hide Streamlit chrome so brand header isn't cut off ── */
+#MainMenu {{ visibility: hidden; }}
+[data-testid="stHeader"] {{ display: none; }}
+footer {{ visibility: hidden; }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -454,7 +459,8 @@ with tab2:
             dark(wf, height=260, yaxis_title="score pts",
                  xaxis=dict(tickfont=dict(size=10, color=DIM), gridcolor=BORDER),
                  yaxis=dict(gridcolor=BORDER, tickfont=dict(color=DIM)))
-            wc1.plotly_chart(wf, use_container_width=True)
+            wc1.plotly_chart(wf, use_container_width=True,
+                             key=f"wf_{o['client_id']}_{o['product'].replace(' ', '_')}")
 
             rm_n, rm_t = bankers["rm"]
             specs_str  = ", ".join(s[0] for s in bankers["specialists"])
@@ -541,7 +547,7 @@ with tab3:
             ))
             g.update_layout(height=190, margin=dict(l=12, r=12, t=36, b=0),
                             paper_bgcolor="rgba(0,0,0,0)", font_color=INK)
-            st.plotly_chart(g, use_container_width=True)
+            st.plotly_chart(g, use_container_width=True, key=f"gauge_{p['program_id']}")
 
             flag_html = " ".join(
                 f"<span class='flag'>· {lbl}: {det}</span>"
@@ -565,7 +571,8 @@ with tab3:
                     ))
                     dark(funnel, height=200, margin=dict(l=0, r=0, t=4, b=0),
                          font=dict(color=INK, size=11))
-                    st.plotly_chart(funnel, use_container_width=True)
+                    st.plotly_chart(funnel, use_container_width=True,
+                                    key=f"funnel_{p['program_id']}")
 
             st.markdown("<hr style='margin:10px 0'>", unsafe_allow_html=True)
 
