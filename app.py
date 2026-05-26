@@ -228,7 +228,7 @@ def banker_card(role, name, title):
 
 
 def dark(fig, **kw):
-    fig.update_layout(**DARK_CHART, **kw)
+    fig.update_layout(**{**DARK_CHART, **kw})
     return fig
 
 
